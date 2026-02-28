@@ -1,0 +1,3 @@
+backend-auth/node_modules/
+backend-auth/.env
+__pycache__/
