@@ -2,16 +2,16 @@ import { useState, useEffect, useRef } from "react";
 
 // ── DATA ──────────────────────────────────────────────────────────────────────
 const INITIAL_MENU = [
-  { id: 1, name: "Masala Dosa",     price: 60,  category: "Breakfast", inStock: false, image: "🥞" },
-  { id: 2, name: "Idli Vada",       price: 50,  category: "Breakfast", inStock: false, image: "🍱" },
-  { id: 3, name: "Chicken Biryani", price: 150, category: "Lunch",     inStock: false, image: "🍛" },
-  { id: 4, name: "Veg Meals",       price: 80,  category: "Lunch",     inStock: false, image: "🥗" },
-  { id: 5, name: "Egg Puffs",       price: 20,  category: "Snacks",    inStock: true,  image: "🥐" },
-  { id: 6, name: "Tea / Coffee",    price: 15,  category: "Drinks",    inStock: true,  image: "☕" },
-  { id: 7, name: "Lime Juice",      price: 25,  category: "Drinks",    inStock: true,  image: "🍋" },
-  { id: 8, name: "Fried Rice",      price: 130, category: "Lunch",     inStock: true,  image: "🍚" },
-  { id: 9, name: "Samosa",          price: 15,  category: "Snacks",    inStock: true,  image: "🥟" },
-  { id: 10, name: "Cold Coffee",    price: 40,  category: "Drinks",    inStock: true,  image: "🧊" },
+  { id: 1, name: "Masala Dosa",     price: 60,  category: "Breakfast", inStock: false, qty: 0,  image: "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7e/Masala_dosa.jpg/640px-Masala_dosa.jpg" },
+  { id: 2, name: "Idli Vada",       price: 50,  category: "Breakfast", inStock: false, qty: 0,  image: "https://upload.wikimedia.org/wikipedia/commons/thumb/6/68/Idli_Sambar.jpg/640px-Idli_Sambar.jpg" },
+  { id: 3, name: "Chicken Biryani", price: 150, category: "Lunch",     inStock: false, qty: 0,  image: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a8/Chicken_biryani.jpg/640px-Chicken_biryani.jpg" },
+  { id: 4, name: "Veg Meals",       price: 80,  category: "Lunch",     inStock: false, qty: 0,  image: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5e/Veg-thali-at-Bharat-Restaurant%2C-Mysore.jpg/640px-Veg-thali-at-Bharat-Restaurant%2C-Mysore.jpg" },
+  { id: 5, name: "Egg Puffs",       price: 20,  category: "Snacks",    inStock: true,  qty: 20, image: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/53/Puff_pastry_01.jpg/640px-Puff_pastry_01.jpg" },
+  { id: 6, name: "Tea / Coffee",    price: 15,  category: "Drinks",    inStock: true,  qty: 50, image: "https://upload.wikimedia.org/wikipedia/commons/thumb/4/45/A_small_cup_of_coffee.JPG/640px-A_small_cup_of_coffee.JPG" },
+  { id: 7, name: "Lime Juice",      price: 25,  category: "Drinks",    inStock: true,  qty: 30, image: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9c/Lemonade_from_concentrate.jpg/640px-Lemonade_from_concentrate.jpg" },
+  { id: 8, name: "Fried Rice",      price: 130, category: "Lunch",     inStock: true,  qty: 15, image: "https://upload.wikimedia.org/wikipedia/commons/thumb/2/22/Fried_rice_-_stonesoup.jpg/640px-Fried_rice_-_stonesoup.jpg" },
+  { id: 9, name: "Samosa",          price: 15,  category: "Snacks",    inStock: true,  qty: 40, image: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/51/Samosachutney.jpg/640px-Samosachutney.jpg" },
+  { id: 10, name: "Cold Coffee",    price: 40,  category: "Drinks",    inStock: true,  qty: 25, image: "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4e/Single_coffee_latte_on_white_background.jpg/640px-Single_coffee_latte_on_white_background.jpg" },
 ];
 
 const USERS = [{ id: "STU001", password: "pass123", name: "Rahul Kumar" }];
@@ -360,15 +360,21 @@ const CSS = `
   .menu-card.sold-out { opacity: 0.65; }
 
   .card-img {
-    height: 140px;
+    height: 160px;
     background: var(--dark3);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 3.5rem;
     position: relative;
     overflow: hidden;
   }
+  .card-img img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.4s ease;
+  }
+  .menu-card:hover .card-img img { transform: scale(1.06); }
   .sold-badge {
     position: absolute;
     inset: 0;
@@ -516,7 +522,17 @@ const CSS = `
     padding: 12px 0;
     border-bottom: 1px solid var(--border);
   }
-  .drawer-item-emoji { font-size: 1.8rem; }
+  .drawer-item-emoji {
+    width: 52px; height: 52px;
+    border-radius: 10px;
+    overflow: hidden;
+    flex-shrink: 0;
+    background: var(--dark3);
+  }
+  .drawer-item-emoji img {
+    width: 100%; height: 100%;
+    object-fit: cover;
+  }
   .drawer-item-info { flex: 1; }
   .drawer-item-name { font-weight: 600; font-size: 0.9rem; }
   .drawer-item-price { color: var(--teal); font-size: 0.85rem; margin-top: 2px; }
@@ -832,7 +848,7 @@ const CSS = `
   .table-head {
     background: var(--dark3);
     display: grid;
-    grid-template-columns: 60px 1fr 100px 120px 80px 120px;
+    grid-template-columns: 55px 1fr 90px 110px 160px 110px;
     padding: 12px 20px;
     gap: 12px;
   }
@@ -845,7 +861,7 @@ const CSS = `
   }
   .table-row {
     display: grid;
-    grid-template-columns: 60px 1fr 100px 120px 80px 120px;
+    grid-template-columns: 55px 1fr 90px 110px 160px 110px;
     padding: 14px 20px;
     gap: 12px;
     align-items: center;
@@ -859,20 +875,77 @@ const CSS = `
   .td.price { font-family: 'Syne', sans-serif; font-weight: 600; color: var(--teal); }
   .td.cat { color: var(--text-muted); font-size: 0.82rem; }
 
-  .stock-badge {
-    padding: 4px 10px;
-    border-radius: 50px;
-    font-size: 0.78rem;
+  .qty-control {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .qty-control-btn {
+    width: 28px; height: 28px;
+    border-radius: 7px;
+    border: 1.5px solid var(--border);
+    background: var(--dark2);
+    color: var(--text);
+    font-size: 1rem;
     font-weight: 700;
     cursor: pointer;
-    border: none;
-    transition: all 0.2s;
-    font-family: 'DM Sans', sans-serif;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.18s;
+    line-height: 1;
   }
-  .stock-badge.in { background: rgba(34,197,94,0.2); color: var(--green); }
-  .stock-badge.in:hover { background: rgba(34,197,94,0.35); }
-  .stock-badge.out { background: rgba(139,163,193,0.15); color: var(--text-muted); }
-  .stock-badge.out:hover { background: rgba(139,163,193,0.25); }
+  .qty-control-btn:hover:not(:disabled) { border-color: var(--teal); color: var(--teal); background: rgba(45,212,191,0.08); }
+  .qty-control-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .qty-control-btn.plus:hover:not(:disabled) { border-color: var(--green); color: var(--green); background: rgba(34,197,94,0.08); }
+  .qty-display {
+    min-width: 38px;
+    text-align: center;
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 0.95rem;
+    padding: 4px 6px;
+    background: var(--dark2);
+    border-radius: 6px;
+    border: 1px solid var(--border);
+  }
+  .qty-display.zero { color: var(--red); border-color: rgba(239,68,68,0.3); }
+  .qty-display.low { color: var(--yellow); border-color: rgba(245,158,11,0.3); }
+  .qty-display.ok { color: var(--green); border-color: rgba(34,197,94,0.3); }
+  .sold-out-pill {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 50px;
+    background: rgba(139,163,193,0.12);
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-left: 6px;
+  }
+
+  /* Payment badge */
+  .pay-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border-radius: 50px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .pay-badge.paid { background: rgba(34,197,94,0.15); color: var(--green); border: 1px solid rgba(34,197,94,0.3); }
+  .pay-badge.pending { background: rgba(245,158,11,0.15); color: var(--yellow); border: 1px solid rgba(245,158,11,0.3); }
+  .pay-toggle-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    padding: 2px 5px;
+    border-radius: 4px;
+    transition: color 0.2s, background 0.2s;
+    margin-left: 2px;
+  }
+  .pay-toggle-btn:hover { color: var(--text); background: rgba(255,255,255,0.07); }
 
   .delete-btn {
     padding: 5px 14px;
@@ -1024,13 +1097,15 @@ function LoginPage({ onLogin }) {
 }
 
 // ── MENU PAGE ─────────────────────────────────────────────────────────────────
-function MenuPage({ user, menu, onLogout, onPlaceOrder }) {
+function MenuPage({ user, menu, onLogout, onPlaceOrder, liveOrders }) {
   const [category, setCategory] = useState("All");
   const [cart, setCart] = useState({});
   const [cartOpen, setCartOpen] = useState(false);
   const [view, setView] = useState("menu"); // "menu" | "orders"
-  const [orders, setOrders] = useState([]);
   const [toast, showToast] = useToast();
+
+  // Filter orders belonging to this student only
+  const orders = liveOrders.filter(o => o.studentId === user.id);
 
   const categories = ["All", "Breakfast", "Lunch", "Snacks", "Drinks"];
   const filtered = menu.filter(i => category === "All" || i.category === category);
@@ -1066,10 +1141,10 @@ function MenuPage({ user, menu, onLogout, onPlaceOrder }) {
       items,
       total: cartTotal,
       status: "preparing",
+      paid: false,
       time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     };
     onPlaceOrder(order);
-    setOrders(o => [order, ...o]);
     setCart({});
     setCartOpen(false);
     showToast("Order placed successfully! 🎉");
@@ -1107,7 +1182,7 @@ function MenuPage({ user, menu, onLogout, onPlaceOrder }) {
             {filtered.map(item => (
               <div key={item.id} className={`menu-card ${!item.inStock ? "sold-out" : ""}`}>
                 <div className="card-img">
-                  {item.image}
+                  <img src={item.image} alt={item.name} onError={e => { e.target.style.display='none'; }} />
                   {!item.inStock && <div className="sold-badge">SOLD OUT</div>}
                 </div>
                 <div className="card-body">
@@ -1149,8 +1224,13 @@ function MenuPage({ user, menu, onLogout, onPlaceOrder }) {
                   <div className="order-id">{o.id}</div>
                   <div className="order-time">{o.time}</div>
                 </div>
-                <div className={`order-status status-${o.status}`}>
-                  {o.status === "preparing" ? "⏳ Preparing" : o.status === "ready" ? "✅ Ready" : "✔ Completed"}
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "6px" }}>
+                  <div className={`order-status status-${o.status}`}>
+                    {o.status === "preparing" ? "⏳ Preparing" : o.status === "ready" ? "✅ Ready" : "✔ Completed"}
+                  </div>
+                  <span className={`pay-badge ${o.paid ? "paid" : "pending"}`}>
+                    {o.paid ? "✔ Payment Done" : "⏳ Payment Pending"}
+                  </span>
                 </div>
               </div>
               <div className="order-items">
@@ -1181,7 +1261,9 @@ function MenuPage({ user, menu, onLogout, onPlaceOrder }) {
                 if (!item) return null;
                 return (
                   <div key={id} className="drawer-item">
-                    <span className="drawer-item-emoji">{item.image}</span>
+                    <div className="drawer-item-emoji">
+                      <img src={item.image} alt={item.name} />
+                    </div>
                     <div className="drawer-item-info">
                       <div className="drawer-item-name">{item.name}</div>
                       <div className="drawer-item-price">₹{item.price} × {qty} = ₹{item.price * qty}</div>
@@ -1219,11 +1301,15 @@ function AdminPage({ onLogout, menu, setMenu, liveOrders, setLiveOrders }) {
 
   const activeOrders = liveOrders.filter(o => o.status !== "completed");
   const totalRevenue = liveOrders.reduce((s, o) => s + o.total, 0);
-  const inStockCount = menu.filter(m => m.inStock).length;
+  const inStockCount = menu.filter(m => m.qty > 0).length;
 
-  const toggleStock = (id) => {
-    setMenu(m => m.map(i => i.id === id ? { ...i, inStock: !i.inStock } : i));
-    showToast("Stock status updated.");
+  const updateQty = (id, delta) => {
+    setMenu(m => m.map(i => {
+      if (i.id !== id) return i;
+      const newQty = Math.max(0, i.qty + delta);
+      return { ...i, qty: newQty, inStock: newQty > 0 };
+    }));
+    showToast(delta > 0 ? "Quantity increased." : "Quantity decreased.");
   };
   const deleteItem = (id) => {
     setMenu(m => m.filter(i => i.id !== id));
@@ -1237,7 +1323,8 @@ function AdminPage({ onLogout, menu, setMenu, liveOrders, setLiveOrders }) {
       price: parseInt(newItem.price),
       category: newItem.category,
       inStock: true,
-      image: "🍽",
+      qty: 10,
+      image: "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6d/Good_Food_Display_-_NCI_Visuals_Online.jpg/640px-Good_Food_Display_-_NCI_Visuals_Online.jpg",
     };
     setMenu(m => [...m, item]);
     setNewItem({ name: "", price: "", category: "Breakfast" });
@@ -1245,6 +1332,10 @@ function AdminPage({ onLogout, menu, setMenu, liveOrders, setLiveOrders }) {
   };
   const updateStatus = (orderId, status) => {
     setLiveOrders(o => o.map(x => x.id === orderId ? { ...x, status } : x));
+  };
+  const togglePayment = (orderId) => {
+    setLiveOrders(o => o.map(x => x.id === orderId ? { ...x, paid: !x.paid } : x));
+    showToast("Payment status updated.");
   };
 
   const EMOJIS = {
@@ -1322,8 +1413,16 @@ function AdminPage({ onLogout, menu, setMenu, liveOrders, setLiveOrders }) {
                     </div>
                     <div className="live-order-items">
                       {order.items.map(i => (
-                        <div key={i.id}>{i.image} {i.name} × {i.qty}</div>
+                        <div key={i.id}>• {i.name} × {i.qty}</div>
                       ))}
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "10px", paddingTop: "10px", borderTop: "1px solid var(--border)" }}>
+                      <span className={`pay-badge ${order.paid ? "paid" : "pending"}`}>
+                        {order.paid ? "✔ Payment Done" : "⏳ Payment Pending"}
+                      </span>
+                      <button className="pay-toggle-btn" onClick={() => togglePayment(order.id)} title="Toggle payment status">
+                        {order.paid ? "Mark Pending" : "Mark Paid"}
+                      </button>
                     </div>
                     <div className="live-order-footer">
                       <div className="live-order-total">₹{order.total}</div>
@@ -1375,22 +1474,36 @@ function AdminPage({ onLogout, menu, setMenu, liveOrders, setLiveOrders }) {
                 <div className="th">Name</div>
                 <div className="th">Price</div>
                 <div className="th">Category</div>
-                <div className="th">Status</div>
+                <div className="th">Quantity</div>
                 <div className="th">Actions</div>
               </div>
               {menu.map(item => (
                 <div key={item.id} className="table-row">
                   <div className="td id">{item.id}</div>
-                  <div className="td">{item.image} {item.name}</div>
+                  <div className="td" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <img src={item.image} alt={item.name} style={{ width: 32, height: 32, borderRadius: 6, objectFit: "cover", flexShrink: 0 }} />
+                    <span>{item.name}</span>
+                    {item.qty === 0 && <span className="sold-out-pill">Sold Out</span>}
+                  </div>
                   <div className="td price">₹{item.price}</div>
                   <div className="td cat">{item.category}</div>
                   <div className="td">
-                    <button
-                      className={`stock-badge ${item.inStock ? "in" : "out"}`}
-                      onClick={() => toggleStock(item.id)}
-                    >
-                      {item.inStock ? "In Stock" : "Sold Out"}
-                    </button>
+                    <div className="qty-control">
+                      <button
+                        className="qty-control-btn"
+                        onClick={() => updateQty(item.id, -1)}
+                        disabled={item.qty === 0}
+                        title="Decrease quantity"
+                      >−</button>
+                      <span className={`qty-display ${item.qty === 0 ? "zero" : item.qty <= 5 ? "low" : "ok"}`}>
+                        {item.qty}
+                      </span>
+                      <button
+                        className="qty-control-btn plus"
+                        onClick={() => updateQty(item.id, 1)}
+                        title="Increase quantity"
+                      >+</button>
+                    </div>
                   </div>
                   <div className="td">
                     <button className="delete-btn" onClick={() => deleteItem(item.id)}>Delete</button>
@@ -1406,18 +1519,31 @@ function AdminPage({ onLogout, menu, setMenu, liveOrders, setLiveOrders }) {
 }
 
 // ── APP ───────────────────────────────────────────────────────────────────────
+function useLocalStorage(key, initial) {
+  const [value, setValue] = useState(() => {
+    try {
+      const stored = localStorage.getItem(key);
+      return stored ? JSON.parse(stored) : initial;
+    } catch { return initial; }
+  });
+  const set = (updater) => {
+    setValue(prev => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      try { localStorage.setItem(key, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
+  return [value, set];
+}
+
 export default function App() {
   const [user, setUser] = useState(null);
-  const [menu, setMenu] = useState(INITIAL_MENU);
-  const [liveOrders, setLiveOrders] = useState([]);
+  const [menu, setMenu] = useLocalStorage("qless_menu", INITIAL_MENU);
+  const [liveOrders, setLiveOrders] = useLocalStorage("qless_orders", []);
 
   const handleLogin = (u) => setUser(u);
   const handleLogout = () => setUser(null);
   const handlePlaceOrder = (order) => setLiveOrders(o => [order, ...o]);
-
-  // Update live orders when menu stock changes (sync order status from admin)
-  // User orders list is maintained within MenuPage component via local state
-  // but we also expose live orders to admin
 
   return (
     <>
@@ -1429,6 +1555,7 @@ export default function App() {
           menu={menu}
           onLogout={handleLogout}
           onPlaceOrder={handlePlaceOrder}
+          liveOrders={liveOrders}
         />
       )}
       {user?.role === "admin" && (
