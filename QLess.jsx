@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 
 // ── DATA ──────────────────────────────────────────────────────────────────────
 const INITIAL_MENU = [
@@ -14,7 +14,7 @@ const INITIAL_MENU = [
   { id: 10, name: "Cold Coffee",    price: 40,  category: "Drinks",    inStock: true,  qty: 25, image: "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4e/Single_coffee_latte_on_white_background.jpg/640px-Single_coffee_latte_on_white_background.jpg" },
 ];
 
-const USERS = [{ id: "STU001", password: "pass123", name: "Rahul Kumar" }];
+const INITIAL_USERS = [{ id: "STU001", password: "pass123", name: "Rahul Kumar", email: "rahul@college.edu" }];
 const ADMIN = { username: "admin", password: "admin123" };
 
 let ORDER_ID_COUNTER = 1000;
@@ -216,6 +216,122 @@ const CSS = `
     transition: color 0.2s;
   }
   .forgot-link:hover { color: var(--coral); }
+
+  .register-link {
+    text-align: center;
+    margin-top: 10px;
+    color: var(--text-muted);
+    font-size: 0.88rem;
+  }
+  .register-link span {
+    color: var(--teal);
+    cursor: pointer;
+    font-weight: 600;
+    transition: color 0.2s;
+  }
+  .register-link span:hover { color: var(--teal-dark); text-decoration: underline; }
+
+  .success-msg {
+    background: rgba(34,197,94,0.15);
+    border: 1px solid rgba(34,197,94,0.4);
+    color: #86EFAC;
+    padding: 10px 14px;
+    border-radius: 10px;
+    font-size: 0.88rem;
+    margin-bottom: 16px;
+    text-align: center;
+  }
+
+  .register-page {
+    min-height: 100vh;
+    background: linear-gradient(135deg, #0F1923 0%, #1A2737 50%, #0F1923 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+    padding: 24px;
+  }
+  .register-page::before {
+    content: '';
+    position: absolute;
+    width: 600px; height: 600px;
+    background: radial-gradient(circle, rgba(45,212,191,0.12) 0%, transparent 70%);
+    top: -200px; left: -200px;
+    border-radius: 50%;
+    animation: pulse 4s ease-in-out infinite;
+  }
+  .register-page::after {
+    content: '';
+    position: absolute;
+    width: 400px; height: 400px;
+    background: radial-gradient(circle, rgba(255,107,91,0.1) 0%, transparent 70%);
+    bottom: -100px; right: -100px;
+    border-radius: 50%;
+    animation: pulse 4s ease-in-out infinite reverse;
+  }
+  .register-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 24px;
+    width: 460px;
+    max-width: 100%;
+    overflow: hidden;
+    box-shadow: var(--shadow), 0 0 0 1px rgba(45,212,191,0.1);
+    position: relative;
+    z-index: 1;
+    animation: slideUp 0.5s ease;
+  }
+  .register-header {
+    background: linear-gradient(135deg, var(--teal-dark) 0%, #0D9488 100%);
+    padding: 32px 36px;
+    text-align: center;
+  }
+  .register-header h1 {
+    font-family: 'Syne', sans-serif;
+    font-size: 1.9rem;
+    font-weight: 800;
+    color: white;
+    letter-spacing: -0.5px;
+  }
+  .register-header p {
+    color: rgba(255,255,255,0.85);
+    margin-top: 6px;
+    font-size: 0.9rem;
+    font-weight: 300;
+  }
+  .register-body { padding: 32px 36px; }
+  .form-row-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .back-link {
+    text-align: center;
+    margin-top: 12px;
+    color: var(--text-muted);
+    font-size: 0.88rem;
+  }
+  .back-link span {
+    color: var(--coral);
+    cursor: pointer;
+    font-weight: 600;
+    transition: color 0.2s;
+  }
+  .back-link span:hover { color: var(--coral-light); text-decoration: underline; }
+  .id-preview {
+    background: var(--dark3);
+    border: 1px dashed rgba(45,212,191,0.3);
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .id-preview strong { color: var(--teal); font-family: 'Syne', sans-serif; font-size: 0.95rem; }
 
   .error-msg {
     background: rgba(239,68,68,0.15);
@@ -1026,7 +1142,7 @@ function useToast() {
 }
 
 // ── LOGIN PAGE ────────────────────────────────────────────────────────────────
-function LoginPage({ onLogin }) {
+function LoginPage({ onLogin, onGoRegister, users, successMsg }) {
   const [tab, setTab] = useState("user");
   const [form, setForm] = useState({ id: "", password: "" });
   const [showPw, setShowPw] = useState(false);
@@ -1039,7 +1155,7 @@ function LoginPage({ onLogin }) {
     setTimeout(() => {
       setLoading(false);
       if (tab === "user") {
-        const u = USERS.find(x => x.id === form.id && x.password === form.password);
+        const u = users.find(x => x.id === form.id && x.password === form.password);
         if (u) onLogin({ role: "user", ...u });
         else setError("Invalid Student ID or Password.");
       } else {
@@ -1063,6 +1179,7 @@ function LoginPage({ onLogin }) {
             <button className={`tab-btn ${tab === "admin" ? "active" : ""}`} onClick={() => { setTab("admin"); setError(""); }}>Admin</button>
           </div>
           <div className="login-title">{tab === "user" ? "Student Login" : "Admin Login"}</div>
+          {successMsg && <div className="success-msg">🎉 {successMsg}</div>}
           {error && <div className="error-msg">{error}</div>}
           <div className="form-group">
             <input
@@ -1090,6 +1207,123 @@ function LoginPage({ onLogin }) {
             {loading ? "Signing in…" : "SIGN IN"}
           </button>
           <div className="forgot-link">Forgot your password?</div>
+          {tab === "user" && (
+            <div className="register-link">
+              New student? <span onClick={onGoRegister}>Create an account →</span>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── REGISTER PAGE ─────────────────────────────────────────────────────────────
+function RegisterPage({ onRegister, onGoLogin, users }) {
+  const [form, setForm] = useState({ name: "", email: "", password: "", confirm: "" });
+  const [showPw, setShowPw] = useState(false);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const validate = () => {
+    if (!form.name.trim()) return "Full name is required.";
+    if (!form.email.trim() || !form.email.includes("@")) return "Enter a valid email address.";
+    if (users.find(u => u.email === form.email.trim())) return "This email is already registered.";
+    if (form.password.length < 6) return "Password must be at least 6 characters.";
+    if (form.password !== form.confirm) return "Passwords do not match.";
+    return null;
+  };
+
+  const handleSubmit = () => {
+    const err = validate();
+    if (err) { setError(err); return; }
+    setError("");
+    setLoading(true);
+    setTimeout(() => {
+      setLoading(false);
+      const nums = users.map(u => parseInt(u.id.replace("STU", ""))).filter(Boolean);
+      const max = nums.length > 0 ? Math.max(...nums) : 0;
+      const generatedId = `STU${String(max + 1).padStart(3, "0")}`;
+      const newUser = {
+        id: generatedId,
+        name: form.name.trim(),
+        email: form.email.trim(),
+        password: form.password,
+      };
+      onRegister(newUser);
+    }, 700);
+  };
+
+  return (
+    <div className="register-page">
+      <div className="register-card">
+        <div className="register-header">
+          <h1>Create Account 🎓</h1>
+          <p>Join Q-Less and skip the canteen queue.</p>
+        </div>
+        <div className="register-body">
+          {error && <div className="error-msg">{error}</div>}
+
+          <div className="form-group">
+            <label className="form-label" style={{ display:"block", fontSize:"0.78rem", color:"var(--text-muted)", marginBottom:"6px", textTransform:"uppercase", letterSpacing:"0.5px" }}>Full Name</label>
+            <input
+              className="form-input"
+              placeholder="e.g. Priya Sharma"
+              value={form.name}
+              onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+            />
+          </div>
+
+          <div className="form-group">
+            <label className="form-label" style={{ display:"block", fontSize:"0.78rem", color:"var(--text-muted)", marginBottom:"6px", textTransform:"uppercase", letterSpacing:"0.5px" }}>Email Address</label>
+            <input
+              className="form-input"
+              type="email"
+              placeholder="you@college.edu"
+              value={form.email}
+              onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+            />
+          </div>
+
+          <div className="form-row-2">
+            <div className="form-group">
+              <label className="form-label" style={{ display:"block", fontSize:"0.78rem", color:"var(--text-muted)", marginBottom:"6px", textTransform:"uppercase", letterSpacing:"0.5px" }}>Password</label>
+              <div className="input-wrap">
+                <input
+                  className="form-input"
+                  type={showPw ? "text" : "password"}
+                  placeholder="Min. 6 chars"
+                  value={form.password}
+                  onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+                />
+                <button className="eye-btn" onClick={() => setShowPw(x => !x)}>{showPw ? "🙈" : "👁"}</button>
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label" style={{ display:"block", fontSize:"0.78rem", color:"var(--text-muted)", marginBottom:"6px", textTransform:"uppercase", letterSpacing:"0.5px" }}>Confirm</label>
+              <input
+                className="form-input"
+                type={showPw ? "text" : "password"}
+                placeholder="Repeat password"
+                value={form.confirm}
+                onChange={e => setForm(f => ({ ...f, confirm: e.target.value }))}
+                onKeyDown={e => e.key === "Enter" && handleSubmit()}
+              />
+            </div>
+          </div>
+
+          <button
+            className="btn-primary"
+            onClick={handleSubmit}
+            disabled={loading}
+            style={{ background: "linear-gradient(135deg, var(--teal) 0%, var(--teal-dark) 100%)", color: "var(--dark)", boxShadow: "0 6px 20px rgba(45,212,191,0.3)" }}
+          >
+            {loading ? "Creating Account…" : "CREATE ACCOUNT"}
+          </button>
+
+          <div className="back-link">
+            Already have an account? <span onClick={onGoLogin}>Sign in →</span>
+          </div>
         </div>
       </div>
     </div>
@@ -1338,11 +1572,6 @@ function AdminPage({ onLogout, menu, setMenu, liveOrders, setLiveOrders }) {
     showToast("Payment status updated.");
   };
 
-  const EMOJIS = {
-    "🍱":"Breakfast", "🍛":"Lunch", "🥐":"Snacks", "☕":"Drinks",
-    "🥗":"Lunch", "🍚":"Lunch", "🥟":"Snacks", "🧊":"Drinks", "🥞":"Breakfast"
-  };
-
   return (
     <div className="admin-layout">
       {toast && <Toast message={toast.msg} type={toast.type} />}
@@ -1524,12 +1753,12 @@ function useLocalStorage(key, initial) {
     try {
       const stored = localStorage.getItem(key);
       return stored ? JSON.parse(stored) : initial;
-    } catch { return initial; }
+    } catch (_e) { return initial; }
   });
   const set = (updater) => {
     setValue(prev => {
       const next = typeof updater === "function" ? updater(prev) : updater;
-      try { localStorage.setItem(key, JSON.stringify(next)); } catch {}
+      try { localStorage.setItem(key, JSON.stringify(next)); } catch (_e) { /* ignore */ }
       return next;
     });
   };
@@ -1538,17 +1767,40 @@ function useLocalStorage(key, initial) {
 
 export default function App() {
   const [user, setUser] = useState(null);
+  const [page, setPage] = useState("login"); // "login" | "register"
+  const [registeredMsg, setRegisteredMsg] = useState("");
   const [menu, setMenu] = useLocalStorage("qless_menu", INITIAL_MENU);
   const [liveOrders, setLiveOrders] = useLocalStorage("qless_orders", []);
+  const [users, setUsers] = useLocalStorage("qless_users", INITIAL_USERS);
 
-  const handleLogin = (u) => setUser(u);
+  const handleLogin = (u) => { setUser(u); setPage("login"); setRegisteredMsg(""); };
   const handleLogout = () => setUser(null);
   const handlePlaceOrder = (order) => setLiveOrders(o => [order, ...o]);
+
+  const handleRegister = (newUser) => {
+    setUsers(u => [...u, newUser]);
+    setRegisteredMsg(`Account created! Your Student ID is ${newUser.id}. Please log in.`);
+    setPage("login");
+  };
 
   return (
     <>
       <style>{CSS}</style>
-      {!user && <LoginPage onLogin={handleLogin} />}
+      {!user && page === "login" && (
+        <LoginPage
+          onLogin={handleLogin}
+          onGoRegister={() => { setPage("register"); setRegisteredMsg(""); }}
+          users={users}
+          successMsg={registeredMsg}
+        />
+      )}
+      {!user && page === "register" && (
+        <RegisterPage
+          onRegister={handleRegister}
+          onGoLogin={() => setPage("login")}
+          users={users}
+        />
+      )}
       {user?.role === "user" && (
         <MenuPage
           user={user}
