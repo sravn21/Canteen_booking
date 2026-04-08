@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 // ── DATA ──────────────────────────────────────────────────────────────────────
 const INITIAL_MENU = [
@@ -1747,14 +1747,20 @@ function AdminPage({ onLogout, menu, setMenu, liveOrders, setLiveOrders }) {
   );
 }
 
-// ── APP ───────────────────────────────────────────────────────────────────────
+// ── LOCAL STORAGE SYNC ────────────────────────────────────────────────────────
+// Reads from localStorage and re-reads whenever another tab writes to it.
+// Also polls every 500ms so same-browser different-role tabs stay in sync.
 function useLocalStorage(key, initial) {
-  const [value, setValue] = useState(() => {
+  const read = () => {
     try {
       const stored = localStorage.getItem(key);
       return stored ? JSON.parse(stored) : initial;
     } catch (_e) { return initial; }
-  });
+  };
+
+  const [value, setValue] = useState(read);
+
+  // Write helper — persists and updates local state
   const set = (updater) => {
     setValue(prev => {
       const next = typeof updater === "function" ? updater(prev) : updater;
@@ -1762,6 +1768,30 @@ function useLocalStorage(key, initial) {
       return next;
     });
   };
+
+  // Re-read when another tab changes localStorage (cross-tab sync)
+  useEffect(() => {
+    const onStorage = (e) => {
+      if (e.key === key) {
+        setValue(read());
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Poll every 500 ms so same-window student↔admin sync works too
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setValue(prev => {
+        const fresh = read();
+        // Only trigger re-render if data actually changed
+        return JSON.stringify(fresh) !== JSON.stringify(prev) ? fresh : prev;
+      });
+    }, 500);
+    return () => clearInterval(interval);
+  }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return [value, set];
 }
 
