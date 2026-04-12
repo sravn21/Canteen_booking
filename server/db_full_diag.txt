@@ -1,0 +1,12 @@
+=== DATABASES ===
+Database: admin
+  - Collection: system.version | Count: 1
+Database: config
+  - Collection: system.sessions | Count: 23
+Database: local
+  - Collection: startup_log | Count: 5
+Database: smart-canteen
+  - Collection: users | Count: 0
+  - Collection: counters | Count: 0
+  - Collection: menus | Count: 60
+  - Collection: orders | Count: 0

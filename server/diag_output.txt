@@ -1,0 +1,9 @@
+Connecting to: mongodb://127.0.0.1:27017/smart-canteen
+Current DB: smart-canteen
+All Databases: ["admin","config","local","smart-canteen"]
+Collections: ["users","counters","menus","orders"]
+- Collection users: 0 docs
+- Collection counters: 0 docs
+- Collection menus: 60 docs
+  Sample from menus: {"_id":"69dadce2d6f30cf1fedc4ec9","id":1,"name":"Masala Dosa","price":60,"category":"Breakfast","image":"https://upload.wikimedia.org/wikipedia/commons/thumb/7/7e/Masala_dosa.jpg/640px-Masala_dosa.jpg
+- Collection orders: 0 docs

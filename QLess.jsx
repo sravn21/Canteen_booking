@@ -2,16 +2,16 @@ import { useState, useEffect } from "react";
 
 // ── DATA ──────────────────────────────────────────────────────────────────────
 const INITIAL_MENU = [
-  { id: 1, name: "Masala Dosa",     price: 60,  category: "Breakfast", inStock: false, qty: 0,  image: "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7e/Masala_dosa.jpg/640px-Masala_dosa.jpg" },
-  { id: 2, name: "Idli Vada",       price: 50,  category: "Breakfast", inStock: false, qty: 0,  image: "https://upload.wikimedia.org/wikipedia/commons/thumb/6/68/Idli_Sambar.jpg/640px-Idli_Sambar.jpg" },
-  { id: 3, name: "Chicken Biryani", price: 150, category: "Lunch",     inStock: false, qty: 0,  image: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a8/Chicken_biryani.jpg/640px-Chicken_biryani.jpg" },
-  { id: 4, name: "Veg Meals",       price: 80,  category: "Lunch",     inStock: false, qty: 0,  image: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5e/Veg-thali-at-Bharat-Restaurant%2C-Mysore.jpg/640px-Veg-thali-at-Bharat-Restaurant%2C-Mysore.jpg" },
-  { id: 5, name: "Egg Puffs",       price: 20,  category: "Snacks",    inStock: true,  qty: 20, image: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/53/Puff_pastry_01.jpg/640px-Puff_pastry_01.jpg" },
-  { id: 6, name: "Tea / Coffee",    price: 15,  category: "Drinks",    inStock: true,  qty: 50, image: "https://upload.wikimedia.org/wikipedia/commons/thumb/4/45/A_small_cup_of_coffee.JPG/640px-A_small_cup_of_coffee.JPG" },
-  { id: 7, name: "Lime Juice",      price: 25,  category: "Drinks",    inStock: true,  qty: 30, image: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9c/Lemonade_from_concentrate.jpg/640px-Lemonade_from_concentrate.jpg" },
-  { id: 8, name: "Fried Rice",      price: 130, category: "Lunch",     inStock: true,  qty: 15, image: "https://upload.wikimedia.org/wikipedia/commons/thumb/2/22/Fried_rice_-_stonesoup.jpg/640px-Fried_rice_-_stonesoup.jpg" },
-  { id: 9, name: "Samosa",          price: 15,  category: "Snacks",    inStock: true,  qty: 40, image: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/51/Samosachutney.jpg/640px-Samosachutney.jpg" },
-  { id: 10, name: "Cold Coffee",    price: 40,  category: "Drinks",    inStock: true,  qty: 25, image: "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4e/Single_coffee_latte_on_white_background.jpg/640px-Single_coffee_latte_on_white_background.jpg" },
+  { id: 1, name: "Masala Dosa", price: 60, category: "Breakfast", inStock: false, qty: 0, image: "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7e/Masala_dosa.jpg/640px-Masala_dosa.jpg" },
+  { id: 2, name: "Idli Vada", price: 50, category: "Breakfast", inStock: false, qty: 0, image: "https://upload.wikimedia.org/wikipedia/commons/thumb/6/68/Idli_Sambar.jpg/640px-Idli_Sambar.jpg" },
+  { id: 3, name: "Chicken Biryani", price: 150, category: "Lunch", inStock: false, qty: 0, image: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a8/Chicken_biryani.jpg/640px-Chicken_biryani.jpg" },
+  { id: 4, name: "Veg Meals", price: 80, category: "Lunch", inStock: false, qty: 0, image: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5e/Veg-thali-at-Bharat-Restaurant%2C-Mysore.jpg/640px-Veg-thali-at-Bharat-Restaurant%2C-Mysore.jpg" },
+  { id: 5, name: "Egg Puffs", price: 20, category: "Snacks", inStock: true, qty: 20, image: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/53/Puff_pastry_01.jpg/640px-Puff_pastry_01.jpg" },
+  { id: 6, name: "Tea / Coffee", price: 15, category: "Drinks", inStock: true, qty: 50, image: "https://upload.wikimedia.org/wikipedia/commons/thumb/4/45/A_small_cup_of_coffee.JPG/640px-A_small_cup_of_coffee.JPG" },
+  { id: 7, name: "Lime Juice", price: 25, category: "Drinks", inStock: true, qty: 30, image: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9c/Lemonade_from_concentrate.jpg/640px-Lemonade_from_concentrate.jpg" },
+  { id: 8, name: "Fried Rice", price: 130, category: "Lunch", inStock: true, qty: 15, image: "https://upload.wikimedia.org/wikipedia/commons/thumb/2/22/Fried_rice_-_stonesoup.jpg/640px-Fried_rice_-_stonesoup.jpg" },
+  { id: 9, name: "Samosa", price: 15, category: "Snacks", inStock: true, qty: 40, image: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/51/Samosachutney.jpg/640px-Samosachutney.jpg" },
+  { id: 10, name: "Cold Coffee", price: 40, category: "Drinks", inStock: true, qty: 25, image: "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4e/Single_coffee_latte_on_white_background.jpg/640px-Single_coffee_latte_on_white_background.jpg" },
 ];
 
 const INITIAL_USERS = [{ id: "STU001", password: "pass123", name: "Rahul Kumar", email: "rahul@college.edu" }];
@@ -1141,29 +1141,96 @@ function useToast() {
   return [toast, show];
 }
 
+// // ── LOGIN PAGE ────────────────────────────────────────────────────────────────
+// function LoginPage({ onLogin, onGoRegister, users, successMsg }) {
+//   const [tab, setTab] = useState("user");
+//   const [form, setForm] = useState({ id: "", password: "" });
+//   const [showPw, setShowPw] = useState(false);
+//   const [error, setError] = useState("");
+//   const [loading, setLoading] = useState(false);
+
+//   const handleSubmit = async () => {
+//     setError("");
+//     setLoading(true);
+
+//     try {
+//       const res = await fetch("http://localhost:5001/api/auth/login", {
+//         method: "POST",
+//         headers: {
+//           "Content-Type": "application/json"
+//         },
+//         body: JSON.stringify({
+//           studentId: form.id,
+//           password: form.password
+//         })
+//       });
+
+//       const data = await res.json();
+
+//       setLoading(false);
+
+//       if (!res.ok) {
+//         setError(data.error || "Login failed");
+//         return;
+//       }
+
+//       onLogin(data.user);
+
+//     } catch (err) {
+//       setLoading(false);
+//       setError("Server error");
+//       console.error(err);
+//     }
+//   };
+
 // ── LOGIN PAGE ────────────────────────────────────────────────────────────────
-function LoginPage({ onLogin, onGoRegister, users, successMsg }) {
+function LoginPage({ onLogin, onGoRegister }) {
   const [tab, setTab] = useState("user");
   const [form, setForm] = useState({ id: "", password: "" });
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     setError("");
+
+    // ✅ Basic validation
+    if (!form.id || !form.password) {
+      setError("Please enter Student ID and Password");
+      return;
+    }
+
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      if (tab === "user") {
-        const u = users.find(x => x.id === form.id && x.password === form.password);
-        if (u) onLogin({ role: "user", ...u });
-        else setError("Invalid Student ID or Password.");
-      } else {
-        if (form.id === ADMIN.username && form.password === ADMIN.password)
-          onLogin({ role: "admin", name: "Admin" });
-        else setError("Invalid admin credentials.");
+
+    try {
+      const res = await fetch("http://localhost:5001/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          studentId: form.id.trim(),   // ✅ trim input
+          password: form.password
+        })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || "Invalid credentials");
+        setLoading(false);
+        return;
       }
-    }, 600);
+
+      // ✅ SUCCESS
+      onLogin(data.user);
+
+    } catch (err) {
+      console.error("Login error:", err);
+      setError("Server not reachable");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -1265,7 +1332,7 @@ function RegisterPage({ onRegister, onGoLogin, users }) {
           {error && <div className="error-msg">{error}</div>}
 
           <div className="form-group">
-            <label className="form-label" style={{ display:"block", fontSize:"0.78rem", color:"var(--text-muted)", marginBottom:"6px", textTransform:"uppercase", letterSpacing:"0.5px" }}>Full Name</label>
+            <label className="form-label" style={{ display: "block", fontSize: "0.78rem", color: "var(--text-muted)", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Full Name</label>
             <input
               className="form-input"
               placeholder="e.g. Priya Sharma"
@@ -1275,7 +1342,7 @@ function RegisterPage({ onRegister, onGoLogin, users }) {
           </div>
 
           <div className="form-group">
-            <label className="form-label" style={{ display:"block", fontSize:"0.78rem", color:"var(--text-muted)", marginBottom:"6px", textTransform:"uppercase", letterSpacing:"0.5px" }}>Email Address</label>
+            <label className="form-label" style={{ display: "block", fontSize: "0.78rem", color: "var(--text-muted)", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Email Address</label>
             <input
               className="form-input"
               type="email"
@@ -1287,7 +1354,7 @@ function RegisterPage({ onRegister, onGoLogin, users }) {
 
           <div className="form-row-2">
             <div className="form-group">
-              <label className="form-label" style={{ display:"block", fontSize:"0.78rem", color:"var(--text-muted)", marginBottom:"6px", textTransform:"uppercase", letterSpacing:"0.5px" }}>Password</label>
+              <label className="form-label" style={{ display: "block", fontSize: "0.78rem", color: "var(--text-muted)", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Password</label>
               <div className="input-wrap">
                 <input
                   className="form-input"
@@ -1300,7 +1367,7 @@ function RegisterPage({ onRegister, onGoLogin, users }) {
               </div>
             </div>
             <div className="form-group">
-              <label className="form-label" style={{ display:"block", fontSize:"0.78rem", color:"var(--text-muted)", marginBottom:"6px", textTransform:"uppercase", letterSpacing:"0.5px" }}>Confirm</label>
+              <label className="form-label" style={{ display: "block", fontSize: "0.78rem", color: "var(--text-muted)", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Confirm</label>
               <input
                 className="form-input"
                 type={showPw ? "text" : "password"}
@@ -1416,7 +1483,7 @@ function MenuPage({ user, menu, onLogout, onPlaceOrder, liveOrders }) {
             {filtered.map(item => (
               <div key={item.id} className={`menu-card ${!item.inStock ? "sold-out" : ""}`}>
                 <div className="card-img">
-                  <img src={item.image} alt={item.name} onError={e => { e.target.style.display='none'; }} />
+                  <img src={item.image} alt={item.name} onError={e => { e.target.style.display = 'none'; }} />
                   {!item.inStock && <div className="sold-badge">SOLD OUT</div>}
                 </div>
                 <div className="card-body">
@@ -1687,7 +1754,7 @@ function AdminPage({ onLogout, menu, setMenu, liveOrders, setLiveOrders }) {
                 <div>
                   <label className="form-label">Category</label>
                   <select className="admin-select" value={newItem.category} onChange={e => setNewItem(n => ({ ...n, category: e.target.value }))}>
-                    {["Breakfast","Lunch","Snacks","Drinks"].map(c => <option key={c}>{c}</option>)}
+                    {["Breakfast", "Lunch", "Snacks", "Drinks"].map(c => <option key={c}>{c}</option>)}
                   </select>
                 </div>
                 <div>

@@ -3,16 +3,16 @@ import axios from "axios";
 
 // ── DATA ──────────────────────────────────────────────────────────────────────
 const INITIAL_MENU = [
-  { id: 1, name: "Masala Dosa",     price: 60,  category: "Breakfast", inStock: false, quantity: 0,  image: "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7e/Masala_dosa.jpg/640px-Masala_dosa.jpg" },
-  { id: 2, name: "Idli Vada",       price: 50,  category: "Breakfast", inStock: false, quantity: 0,  image: "https://upload.wikimedia.org/wikipedia/commons/thumb/6/68/Idli_Sambar.jpg/640px-Idli_Sambar.jpg" },
-  { id: 3, name: "Chicken Biryani", price: 150, category: "Lunch",     inStock: false, quantity: 0,  image: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a8/Chicken_biryani.jpg/640px-Chicken_biryani.jpg" },
-  { id: 4, name: "Veg Meals",       price: 80,  category: "Lunch",     inStock: false, quantity: 0,  image: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5e/Veg-thali-at-Bharat-Restaurant%2C-Mysore.jpg/640px-Veg-thali-at-Bharat-Restaurant%2C-Mysore.jpg" },
-  { id: 5, name: "Egg Puffs",       price: 20,  category: "Snacks",    inStock: true,  quantity: 20, image: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/53/Puff_pastry_01.jpg/640px-Puff_pastry_01.jpg" },
-  { id: 6, name: "Tea / Coffee",    price: 15,  category: "Drinks",    inStock: true,  quantity: 50, image: "https://upload.wikimedia.org/wikipedia/commons/thumb/4/45/A_small_cup_of_coffee.JPG/640px-A_small_cup_of_coffee.JPG" },
-  { id: 7, name: "Lime Juice",      price: 25,  category: "Drinks",    inStock: true,  quantity: 30, image: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9c/Lemonade_from_concentrate.jpg/640px-Lemonade_from_concentrate.jpg" },
-  { id: 8, name: "Fried Rice",      price: 130, category: "Lunch",     inStock: true,  quantity: 15, image: "https://upload.wikimedia.org/wikipedia/commons/thumb/2/22/Fried_rice_-_stonesoup.jpg/640px-Fried_rice_-_stonesoup.jpg" },
-  { id: 9, name: "Samosa",          price: 15,  category: "Snacks",    inStock: true,  quantity: 40, image: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/51/Samosachutney.jpg/640px-Samosachutney.jpg" },
-  { id: 10, name: "Cold Coffee",    price: 40,  category: "Drinks",    inStock: true,  quantity: 25, image: "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4e/Single_coffee_latte_on_white_background.jpg/640px-Single_coffee_latte_on_white_background.jpg" },
+  { id: 1, name: "Masala Dosa", price: 60, category: "Breakfast", inStock: false, quantity: 0, image: "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7e/Masala_dosa.jpg/640px-Masala_dosa.jpg" },
+  { id: 2, name: "Idli Vada", price: 50, category: "Breakfast", inStock: false, quantity: 0, image: "https://upload.wikimedia.org/wikipedia/commons/thumb/6/68/Idli_Sambar.jpg/640px-Idli_Sambar.jpg" },
+  { id: 3, name: "Chicken Biryani", price: 150, category: "Lunch", inStock: false, quantity: 0, image: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a8/Chicken_biryani.jpg/640px-Chicken_biryani.jpg" },
+  { id: 4, name: "Veg Meals", price: 80, category: "Lunch", inStock: false, quantity: 0, image: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5e/Veg-thali-at-Bharat-Restaurant%2C-Mysore.jpg/640px-Veg-thali-at-Bharat-Restaurant%2C-Mysore.jpg" },
+  { id: 5, name: "Egg Puffs", price: 20, category: "Snacks", inStock: true, quantity: 20, image: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/53/Puff_pastry_01.jpg/640px-Puff_pastry_01.jpg" },
+  { id: 6, name: "Tea / Coffee", price: 15, category: "Drinks", inStock: true, quantity: 50, image: "https://upload.wikimedia.org/wikipedia/commons/thumb/4/45/A_small_cup_of_coffee.JPG/640px-A_small_cup_of_coffee.JPG" },
+  { id: 7, name: "Lime Juice", price: 25, category: "Drinks", inStock: true, quantity: 30, image: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9c/Lemonade_from_concentrate.jpg/640px-Lemonade_from_concentrate.jpg" },
+  { id: 8, name: "Fried Rice", price: 130, category: "Lunch", inStock: true, quantity: 15, image: "https://upload.wikimedia.org/wikipedia/commons/thumb/2/22/Fried_rice_-_stonesoup.jpg/640px-Fried_rice_-_stonesoup.jpg" },
+  { id: 9, name: "Samosa", price: 15, category: "Snacks", inStock: true, quantity: 40, image: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/51/Samosachutney.jpg/640px-Samosachutney.jpg" },
+  { id: 10, name: "Cold Coffee", price: 40, category: "Drinks", inStock: true, quantity: 25, image: "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4e/Single_coffee_latte_on_white_background.jpg/640px-Single_coffee_latte_on_white_background.jpg" },
 ];
 
 const USERS = [{ id: "stud", password: "pass123", name: "Rahul Kumar" }];
@@ -1034,22 +1034,52 @@ function LoginPage({ onLogin }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     setError("");
+
+    if (!form.id || !form.password) {
+      setError("Please enter Student ID and Password");
+      return;
+    }
+    // Both User and Admin tabs now use the real backend API.
+
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      if (tab === "user") {
-        const u = USERS.find(x => x.id === form.id && x.password === form.password);
-        if (u) onLogin({ role: "user", ...u });
-        else setError("Invalid Student ID or Password.");
-      } else {
-        if (form.id === ADMIN.username && form.password === ADMIN.password)
-          onLogin({ role: "admin", name: "Admin" });
-        else setError("Invalid admin credentials.");
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentId: form.id.trim().toUpperCase(),
+          password: form.password
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Invalid credentials");
+        return;
       }
-    }, 600);
+
+      // Validate the user's role matches the selected tab
+      if (tab === "admin" && data.user.role !== "admin") {
+        setError("Invalid admin credentials.");
+        return;
+      }
+      if (tab === "user" && data.user.role === "admin") {
+        setError("Please use the Admin tab to log in.");
+        return;
+      }
+
+      // Assign correct role for the frontend
+      const userRole = data.user.role === "admin" ? "admin" : "user";
+      onLogin({ id: data.user.studentId, name: data.user.name, ...data.user, role: userRole });
+    } catch (err) {
+      console.error("Login error:", err);
+      setError("Server not reachable. Is the backend running?");
+    } finally {
+      setLoading(false);
+    }
   };
+
 
   return (
     <div className="login-bg">
@@ -1129,20 +1159,20 @@ function MenuPage({ user, menu, onLogout, onPlaceOrder, liveOrders, formatOrderN
     });
   };
 
- const checkout = async () => {
-  if (cartCount === 0) return;
+  const checkout = async () => {
+    if (cartCount === 0) return;
 
-  const items = Object.entries(cart).map(([id, quantity]) => {
-    const item = menu.find(m => m.id === parseInt(id));
+    const items = Object.entries(cart).map(([id, quantity]) => {
+      const item = menu.find(m => m.id === parseInt(id));
 
-    // CHECK STOCK
-    if (quantity > item.quantity) {
-      showToast(`${item.name} only has ${item.quantity} left`, "error");
-      throw new Error("Insufficient stock");
-    }
+      // CHECK STOCK
+      if (quantity > item.quantity) {
+        showToast(`${item.name} only has ${item.quantity} left`, "error");
+        throw new Error("Insufficient stock");
+      }
 
-    return { ...item, quantity };
-  });
+      return { ...item, quantity };
+    });
     const order = {
       studentId: user.id,
       studentName: user.name,
@@ -1198,7 +1228,7 @@ function MenuPage({ user, menu, onLogout, onPlaceOrder, liveOrders, formatOrderN
               return (
                 <div key={item.id} className={`menu-card ${soldOut ? "sold-out" : ""}`}>
                   <div className="card-img">
-                    <img src={item.image} alt={item.name} onError={e => { e.target.style.display='none'; }} />
+                    <img src={item.image} alt={item.name} onError={e => { e.target.style.display = 'none'; }} />
                     {soldOut && <div className="sold-badge">SOLD OUT</div>}
                   </div>
                   <div className="card-body">
@@ -1338,25 +1368,25 @@ function AdminPage({ onLogout, menu, setMenu, liveOrders, setLiveOrders, formatO
     return () => clearInterval(intervalId);
   }, [setLiveOrders]);
 
- const updateQty = async (id, delta) => {
-  const current = menu.find(i => i.id === id);
-  if (!current) return;
+  const updateQty = async (id, delta) => {
+    const current = menu.find(i => i.id === id);
+    if (!current) return;
 
-  const newQty = Math.max(0, current.quantity + delta);
+    const newQty = Math.max(0, current.quantity + delta);
 
-  // Update UI first
-  setMenu(m =>
-    m.map(i =>
-      i.id === id ? { ...i, quantity: newQty, inStock: newQty > 0 } : i
-    )
-  );
+    // Update UI first
+    setMenu(m =>
+      m.map(i =>
+        i.id === id ? { ...i, quantity: newQty, inStock: newQty > 0 } : i
+      )
+    );
 
-  try {
-    await axios.put(`/api/menu/${id}`, { quantity: newQty });
-  } catch (err) {
-    console.error(err);
-  }
-};
+    try {
+      await axios.put(`/api/menu/${id}`, { quantity: newQty });
+    } catch (err) {
+      console.error(err);
+    }
+  };
   const deleteItem = (id) => {
     const idNum = Number(id);
     setMenu(m => m.filter(i => Number(i.id) !== idNum));
@@ -1414,6 +1444,24 @@ function AdminPage({ onLogout, menu, setMenu, liveOrders, setLiveOrders, formatO
     } catch (err) {
       console.error("Failed to toggle payment", err);
       showToast("Failed to toggle payment", "error");
+    }
+  };
+
+  const verifyViaPi = async (order) => {
+    try {
+      showToast(`Triggering Pi Scanner for Order #${order.orderNumber}...`);
+      const res = await axios.post("/api/process_payment", { orderNumber: order.orderNumber });
+      
+      if (res.data.success) {
+         showToast(`OCR Success! Amount verified: ₹${res.data.extracted.amount}`);
+         // Update the local order to show it's paid
+         setLiveOrders(o => (o || []).map(x => (x._id === order._id ? res.data.order : x)));
+      } else {
+         showToast(res.data.error || "OCR Verification Failed", "error");
+      }
+    } catch (err) {
+      console.error(err);
+      showToast(err.response?.data?.error || "OCR or Camera Error", "error");
     }
   };
 
@@ -1490,13 +1538,22 @@ function AdminPage({ onLogout, menu, setMenu, liveOrders, setLiveOrders, formatO
                         <div key={i.id || `${order._id}-${i.name}`}>• {i.name} × {i.qty}</div>
                       ))}
                     </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "10px", paddingTop: "10px", borderTop: "1px solid var(--border)" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "10px", paddingTop: "10px", borderTop: "1px solid var(--border)", flexWrap: "wrap" }}>
                       <span className={`pay-badge ${order.paid ? "paid" : "pending"}`}>
                         {order.paid ? "✔ Payment Done" : "⏳ Payment Pending"}
                       </span>
                       <button className="pay-toggle-btn" onClick={() => togglePayment(order._id)} title="Toggle payment status">
-                        {order.paid ? "Mark Pending" : "Mark Paid"}
+                        {order.paid ? "Mark Pending" : "Mark Paid manually"}
                       </button>
+                      {!order.paid && (
+                        <button 
+                          className="status-btn ready" 
+                          style={{ marginLeft: "auto", padding: "4px 8px", fontSize: "0.8rem", background: "var(--teal)" }}
+                          onClick={() => verifyViaPi(order)}
+                        >
+                          📷 Verify via Pi
+                        </button>
+                      )}
                     </div>
                     <div className="live-order-footer">
                       <div className="live-order-total">₹{order.total}</div>
@@ -1532,7 +1589,7 @@ function AdminPage({ onLogout, menu, setMenu, liveOrders, setLiveOrders, formatO
                 <div>
                   <label className="form-label">Category</label>
                   <select className="admin-select" value={newItem.category} onChange={e => setNewItem(n => ({ ...n, category: e.target.value }))}>
-                    {["Breakfast","Lunch","Snacks","Drinks"].map(c => <option key={c}>{c}</option>)}
+                    {["Breakfast", "Lunch", "Snacks", "Drinks"].map(c => <option key={c}>{c}</option>)}
                   </select>
                 </div>
                 <div>
@@ -1614,7 +1671,7 @@ function useLocalStorage(key, initial) {
   const set = (updater) => {
     setValue(prev => {
       const next = typeof updater === "function" ? updater(prev) : updater;
-      try { localStorage.setItem(key, JSON.stringify(next)); } catch {}
+      try { localStorage.setItem(key, JSON.stringify(next)); } catch { }
       return next;
     });
   };
@@ -1624,6 +1681,13 @@ function useLocalStorage(key, initial) {
 export default function App() {
   // Persist logged-in user so refresh doesn't send everything back to login
   const [user, setUser] = useLocalStorage("qless_user", null);
+
+  // Invalidate stale session if role is unrecognised
+  useEffect(() => {
+    if (user && user.role !== "user" && user.role !== "admin" && user.role !== "student") {
+      setUser(null);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [menu, setMenu] = useLocalStorage("qless_menu", INITIAL_MENU);
   const [liveOrders, setLiveOrders] = useLocalStorage("qless_orders", []);
 
@@ -1743,7 +1807,7 @@ export default function App() {
     <>
       <style>{CSS}</style>
       {!user && <LoginPage onLogin={handleLogin} />}
-      {user?.role === "user" && (
+      {(user?.role === "user" || user?.role === "student") && (
         <MenuPage
           user={user}
           menu={menu}
