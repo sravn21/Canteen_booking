@@ -3,6 +3,6 @@ const router = express.Router();
 
 const { processImage } = require("../controllers/paymentController");
 
-router.post("/process_payment", processImage);
+router.post("/", processImage);
 
-module.exports = router;
+module.exports = router;

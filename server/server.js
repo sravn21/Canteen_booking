@@ -56,19 +56,15 @@ mongoose.connect(process.env.MONGO_URL)
     console.error("❌ MongoDB Error:", err);
   });
 
-// ✅ Routes
+// ✅ Routes (order matters — auth must be before /api catch-all)
+app.use("/api/auth", require("./routes/authRoutes"));
 app.use("/api/menu", require("./routes/menuRoutes"));
 app.use("/api/orders", require("./routes/OrderRoutes"));
+app.use("/api/process_payment", require("./routes/paymentRoutes"));
 
-// 🔥 PAYMENT ROUTE DEBUG
-const paymentRoutes = require("./routes/paymentRoutes");
-console.log("🔥 paymentRoutes imported");
-
-app.use("/api", paymentRoutes);
-
-// ✅ TEST ROUTE (VERY IMPORTANT)
+// ✅ TEST ROUTE
 app.get("/api/test", (req, res) => {
-  res.send("API working ✅");
+  res.json({ message: "Backend connected successfully ✅" });
 });
 
 // ✅ Health check
@@ -76,19 +72,14 @@ app.get("/", (req, res) => {
   res.send("Server is running 🚀");
 });
 
-// ✅ Error handler
+// ✅ Global error handler (must be last)
 app.use((err, req, res, next) => {
   console.error("🔥 Server Error:", err.stack);
   res.status(500).json({ error: "Something went wrong" });
 });
 
-app.get("/api/test", (req, res) => {
-  res.json({ message: "Backend connected successfully ✅" });
-});
-
-app.use("/api/auth", require("./routes/authRoutes"));
 // ✅ Start
-const PORT = 5001;  // force it
+const PORT = 5001;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
 });

@@ -332,40 +332,78 @@ def parse_payment_details(text, expected_amount=None):
         'upi_transaction_id': None,
     }
 
-    # Amount detection (Targeted verification)
+    # Amount detection
+    # Tesseract mangles ₹ into €, ?, or garbage characters.
+    # Strategy: Don't depend on the currency symbol at all.
+    # Instead, use CONTEXTUAL EXTRACTION — in GPay receipts the amount
+    # always appears as a standalone number between the sender's phone
+    # number and the "Completed" status line.
+    
+    # Also normalize the text: replace / with 7 when adjacent to digits
+    # (Tesseract commonly misreads 7 as /)
+    norm = text
+    # Tesseract misreads ₹ as various characters - normalize them all
+    norm = norm.replace('\u20ac', '₹')    # € -> ₹
+    norm = norm.replace('\ufffd', '₹')    # replacement char -> ₹
+    norm = norm.replace('\u00b0', '₹')    # ° (degree sign) -> ₹  ← actual culprit
+    # Tesseract also misreads 7 as / — fix it right after a ₹ symbol
+    norm = re.sub(r'₹\s*/(\d)', r'₹7\1', norm)
+
+    # --- Method 1: Contextual extraction ---
+    # Find text between a phone number (+91...) and "Completed"
+    context_match = re.search(
+        r'\+91[\d\s]+\n+(.*?)(?:@\s*)?Completed',
+        norm, re.DOTALL | re.IGNORECASE
+    )
+    context_amount = None
+    if context_match:
+        region = context_match.group(1).strip()
+        # Look for any number in this region (strip non-digit OCR noise)
+        nums = re.findall(r'(\d+)', region)
+        for n in nums:
+            val = int(n)
+            if 1 <= val <= 99999:  # reasonable payment amount
+                context_amount = str(val)
+                break
+
+    # --- Method 2: If we have an expected amount, search anywhere ---
     if expected_amount:
-        # To prevent matching "40" inside a Transaction ID like "121340473644",
-        # we enforce that the matched amount MUST be surrounded by non-digits,
-        # while safely allowing Tesseract hallucinated prefixes like "2" or "?".
-        
-        # Regex breakdown:
-        # (?:^|\D)          -> Must start at beginning of line OR after a non-digit character
-        # (?:[₹RsINR\?]+|2)? -> Can optionally be prefixed by Rupee icons OR Tesseract's misread "2"
-        # \s*               -> Optional spaces
-        # ({expected_amount}) -> The EXACT expected number
-        # (?:\.00)?         -> Optional ".00"
-        # (?:$|\D)          -> Must end at line-end OR before a non-digit character
-        
-        safe_boundary_pattern = rf"(?:^|\D)(?:[₹RsINR\?]+|2)?\s*({expected_amount})(?:\.00)?(?:$|\D)"
-        
-        if re.search(safe_boundary_pattern, text, re.IGNORECASE):
+        # Direct search for the expected amount
+        safe_pat = rf'(?:^|\D){expected_amount}(?:$|\D)'
+        if re.search(safe_pat, norm):
+            results['amount'] = expected_amount
+        # Also check if Tesseract prepended a '2' (common hallucination)
+        elif re.search(rf'(?:^|\D)2{expected_amount}(?:$|\D)', norm):
+            results['amount'] = expected_amount
+        # Check the contextual amount we found
+        elif context_amount == expected_amount:
+            results['amount'] = expected_amount
+        # Tesseract might prepend '2' to contextual amount too
+        elif context_amount and context_amount.startswith('2') and context_amount[1:] == expected_amount:
             results['amount'] = expected_amount
 
-    # Fallback to guessing ONLY if we weren't looking for a specific target
-    if not results['amount'] and not expected_amount:
-        amount_patterns = [
-            r'[₹]\s*(\d+)',
-            r'[?R]\s*(\d+)',   # Sometimes Tesseract hallucinates ? or R instead of ₹
-            r'Rs\.?\s*(\d+)',
-            r'INR\s*(\d+)',
-            r'\b(\d+)\.00\b'   # Gpay often shows 95.00
-        ]
-    
-        for pattern in amount_patterns:
-            match = re.search(pattern, text)
+    # --- Method 3: Fallback guess from context ---
+    if not results['amount'] and context_amount:
+        # If context found '2XX' and XX is a reasonable amount, strip the '2' prefix
+        if len(context_amount) >= 2 and context_amount.startswith('2'):
+            stripped = context_amount[1:]
+            if int(stripped) > 0:
+                results['amount'] = stripped
+            else:
+                results['amount'] = context_amount
+        else:
+            results['amount'] = context_amount
+
+    # --- Method 4: Last resort - symbol-based ---
+    if not results['amount']:
+        for pattern in [r'[₹]\s*(\d+)', r'Rs\.?\s*(\d+)', r'INR\s*(\d+)', r'\b(\d+)\.00\b']:
+            match = re.search(pattern, norm)
             if match:
-                results['amount'] = match.group(1)
-                break
+                amt = match.group(1)
+                if len(amt) <= 5 and int(amt) > 0:
+                    results['amount'] = amt
+                    break
+
 
     # Order ID
     order_patterns = [
@@ -381,16 +419,19 @@ def parse_payment_details(text, expected_amount=None):
 
     # Receiver UPI (Smart extraction)
     # We want to find the UPI associated with "To:" to avoid grabbing the sender's UPI
-    # Pattern looks for "To: [Name] [UPI]"
+    # Pattern looks for "To: [Name] [UPI]", allowing '? ' which OCR often substitutes for '7'
     receiver_upi_patterns = [
-        r'To:?\s+.*?\s+([a-z0-9\.\-_]+@[a-z]+)',
-        r'([a-z0-9\.\-_]+@[a-z]+)' # Fallback to first one found
+        r'To:?\s+.*?\s+([a-z0-9\.\-_\?]+@[a-z]+)',
+        r'([a-z0-9\.\-_\?]+@[a-z]+)' # Fallback to first one found
     ]
     
     for pattern in receiver_upi_patterns:
         match = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
         if match:
-            results['receiver_upi'] = match.group(1).lower()
+            extracted_upi = match.group(1).lower()
+            # Sanitize common OCR typos where 7 is read as ?
+            extracted_upi = extracted_upi.replace('?', '7')
+            results['receiver_upi'] = extracted_upi
             break
 
     # Transaction ID

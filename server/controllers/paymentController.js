@@ -26,20 +26,20 @@ exports.processImage = async (req, res) => {
 
         // ==== OPTION 2: Hardware Trigger Logic ====
         try {
-             // Future: HTTP call to Raspberry Pi to snap photo
-             // const axios = require("axios");
-             // const piData = await axios.get("http://<Pi-IP>:5000/snap", { responseType: 'arraybuffer' });
-             // fs.writeFileSync(imagePath, piData.data);
-             // console.log("Pi camera successful!");
-             
-             // UNTIL Pi IS CONNECTED: Copy default test image so UI fully works today safely
-             const testImage = path.join(__dirname, "../ocr/payment.jpg");
-             if (fs.existsSync(testImage)) {
-                 fs.copyFileSync(testImage, imagePath);
-                 console.log(`Pi simulation updated ${imgName} from payment.jpg`);
-             }
+            // Future: HTTP call to Raspberry Pi to snap photo
+            // const axios = require("axios");
+            // const piData = await axios.get("http://<Pi-IP>:5000/snap", { responseType: 'arraybuffer' });
+            // fs.writeFileSync(imagePath, piData.data);
+            // console.log("Pi camera successful!");
+
+            // UNTIL Pi IS CONNECTED: Copy default test image so UI fully works today safely
+            const testImage = path.join(__dirname, "../ocr/payment.jpg");
+            if (fs.existsSync(testImage)) {
+                fs.copyFileSync(testImage, imagePath);
+                console.log(`Pi simulation updated ${imgName} from payment.jpg`);
+            }
         } catch (e) {
-             console.log("Hardware Pi trigger skipped or failed");
+            console.log("Hardware Pi trigger skipped or failed");
         }
         // ===========================================
 
@@ -76,8 +76,6 @@ exports.processImage = async (req, res) => {
                 // (Order already fetched at start of function)
 
                 console.log("DB Expected:", order.total);
-                console.log("OCR Extracted:", extractedAmount);
-
                 // ✅ Compare Amount
                 if (order.total !== extractedAmount) {
                     return res.status(400).json({
@@ -85,9 +83,7 @@ exports.processImage = async (req, res) => {
                         expected: order.total,
                         received: extractedAmount
                     });
-                }
-
-                // ✅ Compare Receiver UPI (The Canteen's Official ID)
+                }// ✅ Compare Receiver UPI (The Canteen's Official ID)
                 const CANTEEN_UPI = process.env.CANTEEN_UPI || "sachincena72@okhdfcbank"; // Replace with real canteen UPI
                 if (data.receiver_upi && data.receiver_upi !== CANTEEN_UPI) {
                     return res.status(400).json({
