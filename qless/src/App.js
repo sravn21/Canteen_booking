@@ -229,6 +229,59 @@ const CSS = `
     text-align: center;
   }
 
+  .success-msg {
+    background: rgba(34,197,94,0.15);
+    border: 1px solid rgba(34,197,94,0.4);
+    color: #86efac;
+    padding: 10px 14px;
+    border-radius: 10px;
+    font-size: 0.88rem;
+    margin-bottom: 16px;
+    text-align: center;
+    animation: fadeIn 0.3s ease;
+  }
+
+  /* ── STEP INDICATOR (Forgot Password) ── */
+  .step-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    margin: 8px 0 0;
+  }
+  .step-dot {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    background: var(--dark3);
+    border: 2px solid var(--border);
+    color: var(--text-muted);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.8rem; font-weight: 700;
+    transition: all 0.3s ease;
+    z-index: 1;
+  }
+  .step-dot.done {
+    background: var(--coral);
+    border-color: var(--coral);
+    color: white;
+    box-shadow: 0 0 12px rgba(255,107,91,0.4);
+  }
+  .step-line {
+    flex: 1; max-width: 80px; height: 2px;
+    background: var(--border);
+    transition: background 0.3s ease;
+  }
+  .step-line.done { background: var(--coral); }
+  .step-labels {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 4px 0;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
   /* ── MENU PAGE ── */
   .menu-page { min-height: 100vh; background: var(--dark); }
 
@@ -1028,58 +1081,125 @@ function useToast() {
 
 // ── LOGIN PAGE ────────────────────────────────────────────────────────────────
 function LoginPage({ onLogin }) {
-  const [tab, setTab] = useState("user");
+  const [tab, setTab] = useState("user"); // "user" | "admin" | "register" | "forgot"
   const [form, setForm] = useState({ id: "", password: "" });
+  const [regForm, setRegForm] = useState({ name: "", email: "", password: "", confirm: "" });
+  const [forgotForm, setForgotForm] = useState({ studentId: "", newPassword: "", confirm: "" });
+  const [forgotStep, setForgotStep] = useState(1); // 1 = enter ID, 2 = enter new password
   const [showPw, setShowPw] = useState(false);
+  const [showRegPw, setShowRegPw] = useState(false);
+  const [showForgotPw, setShowForgotPw] = useState(false);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const switchTab = (t) => { setTab(t); setError(""); setSuccess(""); setForgotStep(1); setForgotForm({ studentId: "", newPassword: "", confirm: "" }); };
+
+  // ── LOGIN ──
   const handleSubmit = async () => {
-    setError("");
-
-    if (!form.id || !form.password) {
-      setError("Please enter Student ID and Password");
-      return;
-    }
-    // Both User and Admin tabs now use the real backend API.
-
+    setError(""); setSuccess("");
+    if (!form.id || !form.password) { setError("Please enter Student ID and Password"); return; }
     setLoading(true);
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          studentId: form.id.trim().toUpperCase(),
-          password: form.password
-        })
+        body: JSON.stringify({ studentId: form.id.trim().toUpperCase(), password: form.password })
       });
       const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || "Invalid credentials");
-        return;
-      }
-
-      // Validate the user's role matches the selected tab
-      if (tab === "admin" && data.user.role !== "admin") {
-        setError("Invalid admin credentials.");
-        return;
-      }
-      if (tab === "user" && data.user.role === "admin") {
-        setError("Please use the Admin tab to log in.");
-        return;
-      }
-
-      // Assign correct role for the frontend
+      if (!res.ok) { setError(data.error || "Invalid credentials"); return; }
+      if (tab === "admin" && data.user.role !== "admin") { setError("Invalid admin credentials."); return; }
+      if (tab === "user" && data.user.role === "admin") { setError("Please use the Admin tab to log in."); return; }
       const userRole = data.user.role === "admin" ? "admin" : "user";
       onLogin({ id: data.user.studentId, name: data.user.name, ...data.user, role: userRole });
     } catch (err) {
-      console.error("Login error:", err);
       setError("Server not reachable. Is the backend running?");
     } finally {
       setLoading(false);
     }
   };
 
+  // ── REGISTER ──
+  const handleRegister = async () => {
+    setError(""); setSuccess("");
+    if (!regForm.name || !regForm.email || !regForm.password || !regForm.confirm) {
+      setError("All fields are required"); return;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(regForm.email)) { setError("Please enter a valid college email"); return; }
+    if (regForm.password.length < 6) { setError("Password must be at least 6 characters"); return; }
+    if (regForm.password !== regForm.confirm) { setError("Passwords do not match"); return; }
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: regForm.name.trim(),
+          email: regForm.email.trim().toLowerCase(),
+          password: regForm.password
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error || "Registration failed"); return; }
+      setRegForm({ name: "", email: "", password: "", confirm: "" });
+      setSuccess(`✅ Account created! Your Student ID is: ${data.user.studentId} — use it to sign in.`);
+      setTimeout(() => switchTab("user"), 4000);
+    } catch (err) {
+      setError("Server not reachable. Is the backend running?");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ── FORGOT PASSWORD ──
+  const handleForgotStep1 = async () => {
+    setError(""); setSuccess("");
+    if (!forgotForm.studentId.trim()) { setError("Please enter your Student ID"); return; }
+    setLoading(true);
+    try {
+      // Ping login with a dummy password — 404 = user not found, 400 = user exists
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ studentId: forgotForm.studentId.trim(), password: "__VERIFY_ONLY__" })
+      });
+      const data = await res.json();
+      if (res.status === 404) { setError("No account found with that Student ID"); return; }
+      if (data.error && data.error.includes("Admin")) { setError("Admin password cannot be reset here"); return; }
+      // Any other response (400 = wrong password) means the ID exists — proceed to step 2
+      setForgotStep(2);
+    } catch (err) {
+      setError("Server not reachable. Is the backend running?");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotReset = async () => {
+    setError(""); setSuccess("");
+    if (!forgotForm.newPassword) { setError("Please enter a new password"); return; }
+    if (forgotForm.newPassword.length < 6) { setError("Password must be at least 6 characters"); return; }
+    if (forgotForm.newPassword !== forgotForm.confirm) { setError("Passwords do not match"); return; }
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ studentId: forgotForm.studentId.trim(), newPassword: forgotForm.newPassword })
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error || "Reset failed"); return; }
+      setForgotForm({ studentId: "", newPassword: "", confirm: "" });
+      setForgotStep(1);
+      setSuccess("✅ Password reset! You can now sign in.");
+      setTimeout(() => switchTab("user"), 2000);
+    } catch (err) {
+      setError("Server not reachable. Is the backend running?");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="login-bg">
@@ -1089,43 +1209,191 @@ function LoginPage({ onLogin }) {
           <p>Reserve your meals and skip the queue.</p>
         </div>
         <div className="login-body">
+          {/* ── TABS ── */}
           <div className="tab-switch">
-            <button className={`tab-btn ${tab === "user" ? "active" : ""}`} onClick={() => { setTab("user"); setError(""); }}>User</button>
-            <button className={`tab-btn ${tab === "admin" ? "active" : ""}`} onClick={() => { setTab("admin"); setError(""); }}>Admin</button>
+            <button className={`tab-btn ${tab === "user" ? "active" : ""}`} onClick={() => switchTab("user")}>Student</button>
+            <button className={`tab-btn ${tab === "admin" ? "active" : ""}`} onClick={() => switchTab("admin")}>Admin</button>
           </div>
-          <div className="login-title">{tab === "user" ? "Student Login" : "Admin Login"}</div>
+
           {error && <div className="error-msg">{error}</div>}
-          <div className="form-group">
-            <input
-              className="form-input"
-              placeholder={tab === "user" ? "Student ID (e.g. STU001)" : "Username"}
-              value={form.id}
-              onChange={e => setForm(f => ({ ...f, id: e.target.value }))}
-              onKeyDown={e => e.key === "Enter" && handleSubmit()}
-            />
-          </div>
-          <div className="form-group">
-            <div className="input-wrap">
-              <input
-                className="form-input"
-                type={showPw ? "text" : "password"}
-                placeholder="Password"
-                value={form.password}
-                onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
-                onKeyDown={e => e.key === "Enter" && handleSubmit()}
-              />
-              <button className="eye-btn" onClick={() => setShowPw(x => !x)}>{showPw ? "🙈" : "👁"}</button>
-            </div>
-          </div>
-          <button className="btn-primary" onClick={handleSubmit} disabled={loading}>
-            {loading ? "Signing in…" : "SIGN IN"}
-          </button>
-          <div className="forgot-link">Forgot your password?</div>
+          {success && <div className="success-msg">{success}</div>}
+
+          {/* ── STUDENT / ADMIN LOGIN ── */}
+          {(tab === "user" || tab === "admin") && (
+            <>
+              <div className="login-title">{tab === "user" ? "Student Login" : "Admin Login"}</div>
+              <div className="form-group">
+                <input
+                  className="form-input"
+                  placeholder={tab === "user" ? "Student ID (e.g. STU001)" : "Username"}
+                  value={form.id}
+                  onChange={e => setForm(f => ({ ...f, id: e.target.value }))}
+                  onKeyDown={e => e.key === "Enter" && handleSubmit()}
+                />
+              </div>
+              <div className="form-group">
+                <div className="input-wrap">
+                  <input
+                    className="form-input"
+                    type={showPw ? "text" : "password"}
+                    placeholder="Password"
+                    value={form.password}
+                    onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+                    onKeyDown={e => e.key === "Enter" && handleSubmit()}
+                  />
+                  <button className="eye-btn" onClick={() => setShowPw(x => !x)}>{showPw ? "🙈" : "👁"}</button>
+                </div>
+              </div>
+              <button className="btn-primary" onClick={handleSubmit} disabled={loading}>
+                {loading ? "Signing in…" : "SIGN IN"}
+              </button>
+              {tab === "user" && (
+                <>
+                  <div className="forgot-link" onClick={() => switchTab("forgot")} style={{marginTop:"14px"}}>
+                    🔑 Forgot your password? <span style={{color:"var(--coral)"}}>Reset it</span>
+                  </div>
+                  <div className="forgot-link" onClick={() => switchTab("register")}>
+                    Don't have an account? <span style={{color:"var(--coral)"}}>Register here</span>
+                  </div>
+                </>
+              )}
+            </>
+          )}
+
+          {/* ── REGISTER ── */}
+          {tab === "register" && (
+            <>
+              <div className="login-title">Create Account</div>
+              <div className="form-group">
+                <input
+                  className="form-input"
+                  placeholder="Full Name"
+                  value={regForm.name}
+                  onChange={e => setRegForm(f => ({ ...f, name: e.target.value }))}
+                />
+              </div>
+              <div className="form-group">
+                <input
+                  className="form-input"
+                  type="email"
+                  placeholder="College Email (e.g. john@college.edu)"
+                  value={regForm.email}
+                  onChange={e => setRegForm(f => ({ ...f, email: e.target.value }))}
+                />
+              </div>
+              <div className="form-group">
+                <div className="input-wrap">
+                  <input
+                    className="form-input"
+                    type={showRegPw ? "text" : "password"}
+                    placeholder="Password (min 6 chars)"
+                    value={regForm.password}
+                    onChange={e => setRegForm(f => ({ ...f, password: e.target.value }))}
+                  />
+                  <button className="eye-btn" onClick={() => setShowRegPw(x => !x)}>{showRegPw ? "🙈" : "👁"}</button>
+                </div>
+              </div>
+              <div className="form-group">
+                <input
+                  className="form-input"
+                  type="password"
+                  placeholder="Confirm Password"
+                  value={regForm.confirm}
+                  onChange={e => setRegForm(f => ({ ...f, confirm: e.target.value }))}
+                  onKeyDown={e => e.key === "Enter" && handleRegister()}
+                />
+              </div>
+              <button className="btn-primary" onClick={handleRegister} disabled={loading}>
+                {loading ? "Creating account…" : "CREATE ACCOUNT"}
+              </button>
+              <div className="forgot-link" onClick={() => switchTab("user")}>
+                Already have an account? <span style={{color:"var(--coral)"}}>Sign in</span>
+              </div>
+            </>
+          )}
+
+          {/* ── FORGOT PASSWORD ── */}
+          {tab === "forgot" && (
+            <>
+              <div className="login-title">Reset Password</div>
+
+              {/* Step indicator */}
+              <div className="step-indicator">
+                <div className={`step-dot ${forgotStep >= 1 ? "done" : ""}`}>1</div>
+                <div className={`step-line ${forgotStep >= 2 ? "done" : ""}`} />
+                <div className={`step-dot ${forgotStep >= 2 ? "done" : ""}`}>2</div>
+              </div>
+              <div className="step-labels">
+                <span style={{color: forgotStep === 1 ? "var(--coral)" : "var(--text-muted)"}}>Verify ID</span>
+                <span style={{color: forgotStep === 2 ? "var(--coral)" : "var(--text-muted)"}}>New Password</span>
+              </div>
+
+              {/* Step 1 — enter Student ID */}
+              {forgotStep === 1 && (
+                <>
+                  <div className="form-group" style={{marginTop:"20px"}}>
+                    <input
+                      className="form-input"
+                      placeholder="Your Student ID (e.g. STU001)"
+                      value={forgotForm.studentId}
+                      onChange={e => setForgotForm(f => ({ ...f, studentId: e.target.value }))}
+                      onKeyDown={e => e.key === "Enter" && handleForgotStep1()}
+                    />
+                  </div>
+                  <button className="btn-primary" onClick={handleForgotStep1} disabled={loading}>
+                    {loading ? "Verifying…" : "VERIFY STUDENT ID →"}
+                  </button>
+                </>
+              )}
+
+              {/* Step 2 — set new password */}
+              {forgotStep === 2 && (
+                <>
+                  <p style={{textAlign:"center", color:"var(--text-muted)", fontSize:"0.85rem", margin:"16px 0 12px"}}>
+                    Setting new password for <strong style={{color:"var(--teal)"}}>{forgotForm.studentId.toUpperCase()}</strong>
+                  </p>
+                  <div className="form-group">
+                    <div className="input-wrap">
+                      <input
+                        className="form-input"
+                        type={showForgotPw ? "text" : "password"}
+                        placeholder="New Password (min 6 chars)"
+                        value={forgotForm.newPassword}
+                        onChange={e => setForgotForm(f => ({ ...f, newPassword: e.target.value }))}
+                      />
+                      <button className="eye-btn" onClick={() => setShowForgotPw(x => !x)}>{showForgotPw ? "🙈" : "👁"}</button>
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <input
+                      className="form-input"
+                      type="password"
+                      placeholder="Confirm New Password"
+                      value={forgotForm.confirm}
+                      onChange={e => setForgotForm(f => ({ ...f, confirm: e.target.value }))}
+                      onKeyDown={e => e.key === "Enter" && handleForgotReset()}
+                    />
+                  </div>
+                  <button className="btn-primary" onClick={handleForgotReset} disabled={loading}>
+                    {loading ? "Resetting…" : "RESET PASSWORD"}
+                  </button>
+                  <div className="forgot-link" onClick={() => { setForgotStep(1); setError(""); }}>
+                    ← Use a different Student ID
+                  </div>
+                </>
+              )}
+
+              <div className="forgot-link" onClick={() => switchTab("user")}>
+                Back to <span style={{color:"var(--coral)"}}>Sign In</span>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
   );
 }
+
 
 // ── MENU PAGE ─────────────────────────────────────────────────────────────────
 function MenuPage({ user, menu, onLogout, onPlaceOrder, liveOrders, formatOrderNumber }) {
