@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import axios from "axios";
 
 // ── DATA ──────────────────────────────────────────────────────────────────────
@@ -685,6 +685,7 @@ const CSS = `
   .status-preparing { background: rgba(245,158,11,0.2); color: var(--yellow); }
   .status-ready { background: rgba(34,197,94,0.2); color: var(--green); }
   .status-completed { background: rgba(139,163,193,0.15); color: var(--text-muted); }
+  .status-cancelled { background: rgba(239,68,68,0.15); color: var(--red); }
   .order-items { margin-bottom: 12px; font-size: 0.88rem; color: var(--text-muted); }
   .order-total {
     font-family: 'Syne', sans-serif;
@@ -1396,15 +1397,66 @@ function LoginPage({ onLogin }) {
 
 
 // ── MENU PAGE ─────────────────────────────────────────────────────────────────
-function MenuPage({ user, menu, onLogout, onPlaceOrder, onCancelOrder, liveOrders, formatOrderNumber }) {
+function MenuPage({ user, menu, onLogout, onPlaceOrder, onCancelOrder, liveOrders, setLiveOrders, formatOrderNumber }) {
   const [category, setCategory] = useState("All");
   const [cart, setCart] = useState({});
   const [cartOpen, setCartOpen] = useState(false);
   const [view, setView] = useState("menu"); // "menu" | "account"
   const [toast, showToast] = useToast();
+  const [cancellingId, setCancellingId] = useState(null);
 
-  // Filter orders belonging to this student only
-  const orders = liveOrders.filter(o => o.studentId === user.id);
+  // Keeps IDs of orders that the student cancelled (or is cancelling).
+  // Using both a ref (for the polling guard) and a state Set (so the button
+  // can't reappear even if the poll overwrites liveOrders before the server
+  // confirms the new status).
+  const pendingCancels = useRef(new Set());
+  const [cancelledOrderIds, setCancelledOrderIds] = useState(() => new Set());
+
+  // Poll orders every 5 seconds. Merge pendingCancels to prevent flicker.
+  useEffect(() => {
+    if (!user) return;
+    const poll = async () => {
+      try {
+        const res = await axios.get("/api/orders");
+        setLiveOrders(
+          res.data.map(o => {
+            const id = o._id || o.id;
+            // If this order is pending cancel and server hasn't confirmed yet,
+            // keep it as cancelled so the UI doesn't flicker back.
+            if (pendingCancels.current.has(id) && o.status !== "cancelled") {
+              return { ...o, status: "cancelled" };
+            }
+            // Once server confirms, clean up the pending set
+            if (pendingCancels.current.has(id) && o.status === "cancelled") {
+              pendingCancels.current.delete(id);
+            }
+            return o;
+          })
+        );
+      } catch (err) {
+        console.error("Failed to poll orders", err);
+      }
+    };
+    poll();
+    const intervalId = setInterval(poll, 5000);
+    return () => clearInterval(intervalId);
+  }, [user, setLiveOrders]);
+
+  // Filter orders belonging to this student, sorted newest first.
+  // The server returns orders in ascending orderNumber order, but we always
+  // want the most recent order at the top so it doesn't jump around after
+  // the poll overwrites the optimistic prepend.
+  const orders = liveOrders
+    .filter(o => o.studentId === user.id)
+    .slice() // avoid mutating the original array
+    .sort((a, b) => {
+      if (a.orderNumber != null && b.orderNumber != null) {
+        return b.orderNumber - a.orderNumber; // newest (highest) first
+      }
+      // Fallback: MongoDB _id is time-based, lexicographic desc = newest first
+      if (a._id && b._id) return b._id > a._id ? 1 : -1;
+      return 0;
+    });
 
   const categories = ["All", "Breakfast", "Lunch", "Snacks", "Drinks"];
   const filtered = menu.filter(i => category === "All" || i.category === category);
@@ -1547,7 +1599,14 @@ function MenuPage({ user, menu, onLogout, onPlaceOrder, onCancelOrder, liveOrder
               <div className="no-orders-icon">📋</div>
               You haven't placed any orders yet.
             </div>
-          ) : orders.map(o => (
+          ) : orders.map(o => {
+            // Use cancelledOrderIds as the source of truth for status while the
+            // cancel is in-flight or confirmed. This prevents any poll-generated
+            // 'preparing' data from briefly showing the wrong badge.
+            const effectiveStatus = cancelledOrderIds.has(o._id || o.id)
+              ? "cancelled"
+              : o.status;
+            return (
             <div key={o._id || o.orderNumber} className="order-card">
               <div className="order-header">
                 <div>
@@ -1555,46 +1614,62 @@ function MenuPage({ user, menu, onLogout, onPlaceOrder, onCancelOrder, liveOrder
                   <div className="order-time">{o.time}</div>
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "6px" }}>
-                  <div className={`order-status status-${o.status}`}>
-                    {o.status === "preparing" ? "⏳ Preparing" : o.status === "ready" ? "✅ Ready" : o.status === "cancelled" ? "❌ Cancelled" : "✔ Completed"}
+                  <div className={`order-status status-${effectiveStatus}`}>
+                    {effectiveStatus === "preparing" ? "⏳ Preparing"
+                      : effectiveStatus === "ready" ? "✅ Ready"
+                      : effectiveStatus === "cancelled" ? "❌ Cancelled"
+                      : "✔ Completed"}
                   </div>
                   <span className={`pay-badge ${o.paid ? "paid" : "pending"}`}>
                     {o.paid ? "✔ Payment Done" : "⏳ Payment Pending"}
                   </span>
-                  {o.status === "preparing" && (
+                  {/* Show cancel button only when truly still preparing */}
+                  {effectiveStatus === "preparing" && (
                     <button 
                       className="delete-btn" 
-                      onClick={async (e) => {
-                        const btn = e.currentTarget;
-                        btn.style.opacity = "0.5";
-                        btn.style.pointerEvents = "none";
+                      disabled={cancellingId === (o._id || o.id)}
+                      onClick={async () => {
+                        const oid = o._id || o.id;
+                        pendingCancels.current.add(oid);
+                        setCancelledOrderIds(prev => new Set([...prev, oid]));
+                        setCancellingId(oid);
                         try {
-                          await onCancelOrder(o._id || o.id);
+                          await onCancelOrder(oid);
                           showToast("Order cancelled successfully.");
                         } catch(err) {
-                          btn.style.opacity = "1";
-                          btn.style.pointerEvents = "auto";
-                          showToast("Failed to cancel order.", "error");
+                          pendingCancels.current.delete(oid);
+                          setCancelledOrderIds(prev => {
+                            const next = new Set(prev);
+                            next.delete(oid);
+                            return next;
+                          });
+                          showToast(err?.response?.data?.error || "Failed to cancel order.", "error");
+                        } finally {
+                          setCancellingId(null);
                         }
                       }}
                       style={{ 
                         marginTop: "4px", padding: "4px 8px", fontSize: "0.8rem", 
-                        background: "rgba(239, 68, 68, 0.1)", color: "var(--red)", 
+                        background: cancellingId === (o._id || o.id) ? "rgba(239,68,68,0.05)" : "rgba(239, 68, 68, 0.1)", 
+                        color: "var(--red)", 
                         border: "1px solid var(--red)", borderRadius: "4px", 
-                        cursor: "pointer"
+                        cursor: cancellingId === (o._id || o.id) ? "not-allowed" : "pointer",
+                        opacity: cancellingId === (o._id || o.id) ? 0.55 : 1,
+                        transition: "opacity 0.2s"
                       }}
                     >
-                      Cancel Order
+                      {cancellingId === (o._id || o.id) ? "Cancelling…" : "Cancel Order"}
                     </button>
                   )}
                 </div>
               </div>
               <div className="order-items">
-                {o.items.map(i => `${i.name} × ${i.qty}`).join("  •  ")}
+                {o.items.map(i => `${i.name} × ${i.qty ?? i.quantity ?? 1}`).join("  •  ")}
               </div>
               <div className="order-total">₹{o.total}</div>
             </div>
-          ))}
+          );
+          })}
         </div>
       )}
 
@@ -1982,13 +2057,18 @@ function useLocalStorage(key, initial) {
       return stored ? JSON.parse(stored) : initial;
     } catch { return initial; }
   });
-  const set = (updater) => {
+
+  // Memoize so the reference is stable across renders.
+  // Without this, any component that uses setLiveOrders in a useEffect
+  // dependency array would re-run on every render, firing extra network calls.
+  const set = useCallback((updater) => {
     setValue(prev => {
       const next = typeof updater === "function" ? updater(prev) : updater;
       try { localStorage.setItem(key, JSON.stringify(next)); } catch { }
       return next;
     });
-  };
+  }, [key]); // key is a constant string — set will never change
+
   return [value, set];
 }
 
@@ -2106,33 +2186,36 @@ export default function App() {
   };
 
   const handleCancelOrder = async (orderId) => {
-    // Fire optimistic UI update globally
-    setLiveOrders(orders => orders.map(o => {
-      if (o._id === orderId || o.id === orderId) {
-        return { ...o, status: "cancelled" };
-      }
-      return o;
-    }));
+    // Optimistic update so the UI responds immediately
+    setLiveOrders(orders => orders.map(o =>
+      (o._id === orderId || o.id === orderId) ? { ...o, status: "cancelled" } : o
+    ));
 
     try {
-      // Sync with MongoDB
       await axios.put(`/api/orders/${orderId}/cancel`);
-      
-      // Async stock refresh (no await needed for UI)
-      axios.get("/api/menu").then(m => {
-        const normalize = (item) => ({ ...item, quantity: Number(item.quantity ?? 0), inStock: Number(item.quantity ?? 0) > 0 });
-        setMenu((m.data || []).map(normalize));
-      }).catch(console.error);
 
+      // Fetch fresh orders AND menu from server so state is authoritative.
+      // Running them in parallel keeps it fast.
+      const [ordersRes, menuRes] = await Promise.all([
+        axios.get("/api/orders"),
+        axios.get("/api/menu"),
+      ]);
+      const normalize = (item) => ({
+        ...item,
+        quantity: Number(item.quantity ?? 0),
+        inStock: Number(item.quantity ?? 0) > 0,
+      });
+      setMenu((menuRes.data || []).map(normalize));
+      // Server data is now authoritative after the confirmed cancel.
+      // MenuPage's own pendingCancels guard in the polling loop will
+      // protect any other concurrent in-flight cancellations.
+      setLiveOrders(ordersRes.data);
     } catch (err) {
       console.error(err);
-      // Revert optimistic update
-      setLiveOrders(orders => orders.map(o => {
-        if (o._id === orderId || o.id === orderId) {
-          return { ...o, status: "preparing" };
-        }
-        return o;
-      }));
+      // Revert the optimistic update on failure
+      setLiveOrders(orders => orders.map(o =>
+        (o._id === orderId || o.id === orderId) ? { ...o, status: "preparing" } : o
+      ));
       throw err;
     }
   };
@@ -2161,6 +2244,7 @@ export default function App() {
           onPlaceOrder={handlePlaceOrder}
           onCancelOrder={handleCancelOrder}
           liveOrders={liveOrders}
+          setLiveOrders={setLiveOrders}
           formatOrderNumber={formatOrderNumber}
         />
       )}
