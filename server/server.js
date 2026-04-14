@@ -45,12 +45,52 @@ async function ensureOrderNumbers() {
   console.log(`Backfilled ${missing.length} order(s)`);
 }
 
+// ✅ Pre-warm EasyOCR at server startup (so first payment request is fast)
+async function warmupOCR() {
+  try {
+    console.log("🔥 Warming up EasyOCR model (this takes 20-40 seconds, happens once)...");
+    const { exec } = require("child_process");
+    const pythonPath = "C:\\Python312\\python.exe";
+    const scriptPath = path.join(__dirname, "./ocr/cl_ocr_label.py");
+
+    await new Promise((resolve, reject) => {
+      // Run Python to initialize the reader without processing any image
+      const initScript = `
+import sys
+sys.path.insert(0, r'${path.join(__dirname, "./ocr")}')
+from cl_ocr_label import get_ocr_reader
+print("[WARMUP] Initializing EasyOCR reader...")
+reader = get_ocr_reader()
+print("[WARMUP] EasyOCR ready!")
+`;
+
+      exec(`"${pythonPath}" -c "${initScript.replace(/"/g, '\\"')}"`,
+        { timeout: 120000 },
+        (error, stdout, stderr) => {
+          if (error) {
+            console.warn("⚠️  EasyOCR warmup failed (OCR will initialize on first use):", error.message);
+            resolve(); // Don't reject—let server continue
+          } else {
+            console.log("✅ EasyOCR warmed up successfully!");
+            resolve();
+          }
+        }
+      );
+    });
+  } catch (err) {
+    console.warn("⚠️  EasyOCR warmup error (non-critical):", err.message);
+  }
+}
+
 // ✅ MongoDB
 mongoose.connect(process.env.MONGO_URL)
   .then(async (m) => {
     console.log("✅ MongoDB Connected");
     console.log("🔥 DB NAME:", m.connection.db.databaseName); // Real DB name
     await ensureOrderNumbers();
+
+    // Warm up EasyOCR in background (non-blocking)
+    warmupOCR().catch(err => console.warn("⚠️  OCR warmup issue:", err));
   })
   .catch((err) => {
     console.error("❌ MongoDB Error:", err);

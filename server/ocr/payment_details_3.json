@@ -1,9 +1,9 @@
 {
-  "amount": null,
+  "amount": "100",
   "order_id": null,
   "date": null,
   "time": null,
-  "receiver_upi": "2@okhdfcbank",
+  "receiver_upi": "sachincena72@okhdfcbank",
   "receiver_name": null,
-  "upi_transaction_id": "608513219460"
+  "upi_transaction_id": "642776426292"
 }

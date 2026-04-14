@@ -24,33 +24,70 @@ async function seedMenu() {
 // GET menu
 router.get("/", async (req,res)=>{
   await seedMenu();
+
+  // Remove duplicate items (keep only one per numeric id)
   const items = await Menu.find().sort({ id: 1 });
-  res.json(items);
+
+  const seenIds = new Set();
+  const duplicates = [];
+
+  for (const item of items) {
+    if (seenIds.has(item.id)) {
+      duplicates.push(item._id);
+    } else {
+      seenIds.add(item.id);
+    }
+  }
+
+  if (duplicates.length > 0) {
+    console.log(`[MENU] Found and removing ${duplicates.length} duplicate menu items`);
+    await Menu.deleteMany({ _id: { $in: duplicates } });
+  }
+
+  const finalItems = await Menu.find().sort({ id: 1 });
+  res.json(finalItems);
 });
 
 // Add menu item
 router.post("/", async (req,res)=>{
-  const newItem = new Menu(req.body);
-  const saved = await newItem.save();
-  res.json(saved);
+  try {
+    console.log("[MENU] Creating new item:", req.body);
+    const newItem = new Menu(req.body);
+    const saved = await newItem.save();
+    console.log("[MENU] Item created successfully:", saved._id);
+    res.json(saved);
+  } catch (err) {
+    console.error("[MENU] Failed to create menu item:", err.message);
+    res.status(500).json({ error: `Failed to create menu item: ${err.message}` });
+  }
 });
 
 // Update a menu item by id
 router.put("/:id", async (req, res) => {
-  const { id } = req.params;
-  const updateData = { ...req.body };
+  try {
+    const { id } = req.params;
+    const updateData = { ...req.body };
 
-  // Try matching by numeric `id` first, then Mongo `_id`.
-  let updated = await Menu.findOneAndUpdate({ id: Number(id) }, updateData, { new: true });
-  if (!updated) {
-    updated = await Menu.findByIdAndUpdate(id, updateData, { new: true });
+    console.log(`[MENU] Updating item ${id} with:`, updateData);
+
+    // Try matching by numeric `id` first, then Mongo `_id`.
+    let updated = await Menu.findOneAndUpdate({ id: Number(id) }, updateData, { new: true });
+    if (!updated) {
+      console.log(`[MENU] Not found by numeric id, trying Mongo _id...`);
+      updated = await Menu.findByIdAndUpdate(id, updateData, { new: true });
+    }
+
+    if (!updated) {
+      console.log(`[MENU] Item not found: ${id}`);
+      return res.status(404).json({ error: "Menu item not found" });
+    }
+
+    console.log(`[MENU] Update successful:`, updated._id, "quantity:", updated.quantity);
+    res.json(updated);
+  } catch (err) {
+    console.error("[MENU] Failed to update menu item:", err.message);
+    res.status(500).json({ error: `Failed to update menu item: ${err.message}` });
   }
-
-  if (!updated) {
-    return res.status(404).json({ error: "Menu item not found" });
-  }
-
-  res.json(updated);
 });
 
 module.exports = router;

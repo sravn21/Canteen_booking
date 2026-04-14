@@ -1,9 +1,1 @@
-{
-  "amount": "15",
-  "order_id": null,
-  "date": null,
-  "time": null,
-  "receiver_upi": "q409743829@ybl",
-  "receiver_name": null,
-  "upi_transaction_id": "121340473644"
-}
+{"error": "'charmap' codec can't encode character '\\U0001f50d' in position 0: character maps to <undefined>"}

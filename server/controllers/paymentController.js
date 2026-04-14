@@ -24,41 +24,60 @@ exports.processImage = async (req, res) => {
         const imagePath = path.join(__dirname, "../ocr/", imgName);
         const jsonPath = path.join(__dirname, "../ocr/", jsonName);
 
-        // ==== OPTION 2: Hardware Trigger Logic ====
-        try {
-            // Future: HTTP call to Raspberry Pi to snap photo
-            // const axios = require("axios");
-            // const piData = await axios.get("http://<Pi-IP>:5000/snap", { responseType: 'arraybuffer' });
-            // fs.writeFileSync(imagePath, piData.data);
-            // console.log("Pi camera successful!");
-
-            // UNTIL Pi IS CONNECTED: Copy default test image so UI fully works today safely
-            const testImage = path.join(__dirname, "../ocr/payment.jpg");
-            if (fs.existsSync(testImage)) {
-                fs.copyFileSync(testImage, imagePath);
-                console.log(`Pi simulation updated ${imgName} from payment.jpg`);
-            }
-        } catch (e) {
-            console.log("Hardware Pi trigger skipped or failed");
+        // ✅ Check if file was uploaded via multer
+        if (!req.file) {
+            return res.status(400).json({
+                error: "No image file uploaded. Please capture a payment screenshot and try again.",
+                requiresCapture: true
+            });
         }
-        // ===========================================
 
-        if (!fs.existsSync(imagePath)) {
-            return res.status(500).json({ error: `${imgName} not found. Connect Pi or supply fallback.` });
+        // File was uploaded successfully by multer
+        console.log(`✅ File uploaded: ${req.file.filename} at ${req.file.path}`);
+
+        // Rename the multer-uploaded file to our expected name
+        try {
+            if (fs.existsSync(req.file.path)) {
+                fs.renameSync(req.file.path, imagePath);
+                console.log(`✅ File renamed to: ${imagePath}`);
+            } else {
+                return res.status(500).json({ error: "Multer file not found at expected location" });
+            }
+        } catch (renameErr) {
+            console.error("❌ File rename error:", renameErr);
+            return res.status(500).json({ error: "Failed to process uploaded file" });
         }
 
         const scriptPath = path.join(__dirname, "../ocr/cl_ocr_label.py");
+        const ocrDir = path.join(__dirname, "../ocr/");
+        const pythonPath = "C:\\Python312\\python.exe"; // Full path to Python
 
-        // ✅ Run Python OCR and pass the Explicit Target Amount!
-        exec(`python "${scriptPath}" "${imgName}" "${jsonName}" "${order.total}"`, async (error, stdout, stderr) => {
+        // ✅ Run Python OCR with the uploaded image and pass the Explicit Target Amount!
+        // Set environment to ensure Python finds installed packages and handles encoding
+        exec(`"${pythonPath}" "${scriptPath}" "${imgName}" "${jsonName}" "${order.total}"`,
+            {
+                cwd: ocrDir,
+                env: {
+                    ...process.env,
+                    PYTHONUNBUFFERED: '1',
+                    PYTHONIOENCODING: 'utf-8'
+                }
+            },
+            async (error, stdout, stderr) => {
             if (error) {
                 console.error("❌ Python error:", error);
-                return res.status(500).json({ error: "OCR failed" });
+                console.error("Python stdout:", stdout);
+                console.error("Python stderr:", stderr);
+                return res.status(500).json({ error: "OCR processing failed" });
             }
+
+            // Log Python output
+            console.log("Python stdout:", stdout);
+
 
             try {
                 if (!fs.existsSync(jsonPath)) {
-                    return res.status(500).json({ error: "OCR output JSON not found" });
+                    return res.status(500).json({ error: "OCR output not generated" });
                 }
 
                 const raw = fs.readFileSync(jsonPath, "utf-8");

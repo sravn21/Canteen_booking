@@ -1,491 +1,301 @@
-# """
-# GPay Receipt OCR - Optimized for Camera Photos
-# Extracts: Amount, Order ID, Date, Time, Receiver UPI
-# Saves results to payment_details.txt
-# """
+"""
+Payment Receipt OCR - Using EasyOCR for High Accuracy
+Extracts: Amount (₹), Receiver UPI ID
+Simplified and focused extraction
+"""
 
-# import cv2
-# import pytesseract
-# import re
-# import numpy as np
-# import json
-# from datetime import datetime
-
-# def preprocess_camera_image(img_path):
-#     """
-#     Better preprocessing for camera-captured images
-#     """
-#     img = cv2.imread(img_path)
-    
-#     # Convert to grayscale
-#     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    
-#     # Invert if dark
-#     if np.mean(gray) < 127:
-#         gray = cv2.bitwise_not(gray)
-    
-#     # Upscale significantly
-#     gray = cv2.resize(gray, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
-    
-#     # Strong denoising for camera noise
-#     denoised = cv2.fastNlMeansDenoising(gray, h=10)
-    
-#     # Adaptive threshold
-#     binary = cv2.adaptiveThreshold(denoised, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
-#                                    cv2.THRESH_BINARY, 21, 10)
-    
-#     return binary
-
-# def extract_all_text(img_path):
-#     """
-#     Extract all text with multiple attempts
-#     """
-#     # Preprocess
-#     processed = preprocess_camera_image(img_path)
-    
-#     # Try multiple OCR configurations
-#     all_text = []
-    
-#     configs = [
-#         '--oem 3 --psm 6',
-#         '--oem 3 --psm 4',
-#         '--oem 3 --psm 11',
-#     ]
-    
-#     for config in configs:
-#         text = pytesseract.image_to_string(processed, config=config)
-#         all_text.append(text)
-    
-#     # Combine
-#     combined = '\n'.join(all_text)
-#     return combined
-
-# def parse_payment_details(text):
-#     """
-#     Extract specific fields
-#     """
-#     results = {
-#         'amount': None,
-#         'order_id': None,
-#         'date': None,
-#         'time': None,
-#         'receiver_upi': None,
-#         'receiver_name': None,
-#         'upi_transaction_id': None,
-#     }
-    
-#     print("\n" + "="*70)
-#     print("RAW OCR TEXT:")
-#     print("="*70)
-#     print(text[:800])
-#     print("="*70)
-    
-#     # Extract Amount (₹1) - prioritize small amounts
-#     amount_patterns = [
-#         r'[₹]\s*([1-9])\b',  # Single digit with rupee symbol
-#         r'To\s+[A-Za-z\s]+\n.*?[₹]\s*(\d{1,3})\b',  # After "To" name
-#         r'\b([1-9])\s*\n\s*[A-Z]{2}\d+',  # Single digit before order ID
-#     ]
-#     for pattern in amount_patterns:
-#         match = re.search(pattern, text, re.DOTALL)
-#         if match:
-#             amt = match.group(1)
-#             if 1 <= len(amt) <= 4:
-#                 results['amount'] = amt
-#                 break
-    
-#     # Fallback: any reasonable amount
-#     if not results['amount']:
-#         general_amount = re.search(r'[₹Rs]\s*(\d{1,4})\b', text)
-#         if general_amount:
-#             results['amount'] = general_amount.group(1)
-    
-#     # Extract Order ID (RD912 - appears after amount, before Pay again)
-#     order_patterns = [
-#         r'\b(RD\d+)\b',  # RD followed by numbers
-#         r'\b([A-Z]{2,3}\d{3,})\b',  # 2-3 letters + 3+ numbers
-#         r'₹\d+\s*\n\s*([A-Z0-9\-]+)\s*\n',  # After amount
-#     ]
-#     for pattern in order_patterns:
-#         match = re.search(pattern, text)
-#         if match:
-#             order_id = match.group(1).strip()
-#             if 3 <= len(order_id) <= 20 and not order_id.isdigit():
-#                 results['order_id'] = order_id
-#                 break
-    
-#     # Extract Date and Time - more flexible
-#     datetime_patterns = [
-#         r'(\d{1,2}\s*(?:Feb|Jan|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s*\d{4})[,\s]+(\d{1,2}:\d{2}\s*(?:pm|am)?)',
-#         r'(\d{1,2})\s*(?:Feb|Jan|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s*(\d{4})[,\s]+(\d{1,2})[:\s]*(\d{2})\s*(?:pm|am)?',
-#     ]
-    
-#     # Try first pattern
-#     match = re.search(datetime_patterns[0], text, re.IGNORECASE)
-#     if match:
-#         results['date'] = match.group(1).strip()
-#         results['time'] = match.group(2).strip()
-#     else:
-#         # Try second pattern with more detail
-#         match = re.search(datetime_patterns[1], text, re.IGNORECASE)
-#         if match:
-#             day = match.group(1)
-#             year = match.group(2)
-#             hour = match.group(3)
-#             minute = match.group(4)
-            
-#             # Find month name
-#             month_match = re.search(r'(Feb|Jan|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)', text, re.IGNORECASE)
-#             if month_match:
-#                 month = month_match.group(1)
-#                 results['date'] = f"{day} {month} {year}"
-#                 results['time'] = f"{hour}:{minute} pm"
-    
-#     # Extract Receiver UPI (sachusamuel2@okicici)
-#     upi_pattern = r'([a-z0-9\.\-_]+@[a-z]+)'
-#     upi_match = re.search(upi_pattern, text, re.IGNORECASE)
-#     if upi_match:
-#         results['receiver_upi'] = upi_match.group(1).lower()
-    
-#     # Extract Receiver Name (Sachu Samuel)
-#     name_patterns = [
-#         r'To[:\s]+([A-Z][a-z]+\s+[A-Z][a-z]+)',
-#         r'To\s+([A-Z][A-Za-z\s]+?)(?:\n|\+)',
-#     ]
-#     for pattern in name_patterns:
-#         match = re.search(pattern, text)
-#         if match:
-#             name = match.group(1).strip()
-#             if 5 <= len(name) <= 50:
-#                 results['receiver_name'] = name
-#                 break
-    
-#     # Extract UPI Transaction ID
-#     upi_trans_patterns = [
-#         r'UPI\s+transaction\s+ID\s*(\d{10,15})',
-#         r'\b(\d{12})\b',
-#     ]
-#     for pattern in upi_trans_patterns:
-#         match = re.search(pattern, text, re.IGNORECASE)
-#         if match:
-#             results['upi_transaction_id'] = match.group(1)
-#             break
-    
-#     return results
-
-# def save_to_file(results, filename='payment_details.txt'):
-#     """
-#     Save extracted details to file
-#     """
-#     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
-#     # Save as readable text
-#     with open(filename, 'w', encoding='utf-8') as f:
-#         f.write("="*70 + "\n")
-#         f.write("GPAY PAYMENT DETAILS\n")
-#         f.write(f"Extracted on: {timestamp}\n")
-#         f.write("="*70 + "\n\n")
-        
-#         f.write(f"Amount: ₹{results['amount']}\n" if results['amount'] else "Amount: NOT FOUND\n")
-#         f.write(f"Order ID: {results['order_id']}\n" if results['order_id'] else "Order ID: NOT FOUND\n")
-#         f.write(f"Date: {results['date']}\n" if results['date'] else "Date: NOT FOUND\n")
-#         f.write(f"Time: {results['time']}\n" if results['time'] else "Time: NOT FOUND\n")
-#         f.write(f"Receiver Name: {results['receiver_name']}\n" if results['receiver_name'] else "Receiver Name: NOT FOUND\n")
-#         f.write(f"Receiver UPI: {results['receiver_upi']}\n" if results['receiver_upi'] else "Receiver UPI: NOT FOUND\n")
-#         f.write(f"UPI Transaction ID: {results['upi_transaction_id']}\n" if results['upi_transaction_id'] else "UPI Transaction ID: NOT FOUND\n")
-        
-#         f.write("\n" + "="*70 + "\n")
-    
-#     # Also save as JSON
-#     json_filename = filename.replace('.txt', '.json')
-#     with open(json_filename, 'w', encoding='utf-8') as f:
-#         json.dump(results, f, indent=2, ensure_ascii=False)
-    
-#     print(f"\n✓ Details saved to: {filename}")
-#     print(f"✓ JSON saved to: {json_filename}")
-
-# def main():
-#     """
-#     Main function
-#     """
-#     print("="*70)
-#     print("GPAY RECEIPT OCR - CAMERA PHOTO MODE")
-#     print("="*70)
-    
-#     img_path = 'payment.jpg'
-    
-#     try:
-#         print("\nExtracting text from image...")
-#         text = extract_all_text(img_path)
-        
-#         print("\nParsing payment details...")
-#         results = parse_payment_details(text)
-        
-#         # Display results
-#         print("\n" + "="*70)
-#         print("EXTRACTED PAYMENT DETAILS")
-#         print("="*70)
-        
-#         print(f"\n💰 Amount: ₹{results['amount']}" if results['amount'] else "\n💰 Amount: NOT FOUND")
-#         print(f"🏷️  Order ID: {results['order_id']}" if results['order_id'] else "🏷️  Order ID: NOT FOUND")
-#         print(f"📅 Date: {results['date']}" if results['date'] else "📅 Date: NOT FOUND")
-#         print(f"🕐 Time: {results['time']}" if results['time'] else "🕐 Time: NOT FOUND")
-#         print(f"👤 Receiver: {results['receiver_name']}" if results['receiver_name'] else "👤 Receiver: NOT FOUND")
-#         print(f"   UPI: {results['receiver_upi']}" if results['receiver_upi'] else "   UPI: NOT FOUND")
-#         print(f"🔢 UPI Transaction ID: {results['upi_transaction_id']}" if results['upi_transaction_id'] else "🔢 UPI Transaction ID: NOT FOUND")
-        
-#         print("\n" + "="*70)
-        
-#         # Save to file
-#         save_to_file(results)
-        
-#         return results
-        
-#     except Exception as e:
-#         print(f"\n✗ Error: {e}")
-#         import traceback
-#         traceback.print_exc()
-#         return None
-
-# if __name__ == "__main__":
-#     main()
-
-
-
-
-
-
-
-
-import cv2
-import pytesseract
-import re
-import numpy as np
-import json
+import sys
 import os
+import json
+import re
+from difflib import SequenceMatcher  # For fuzzy matching
 
-# SET TESSERACT PATH
-pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-
-
-def preprocess_camera_image(img_path):
-    img = cv2.imread(img_path)
-
-    if img is None:
-        raise Exception(f"OpenCV failed to read image at: {img_path}")
-
-    print("Image loaded successfully")
-
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-    if np.mean(gray) < 127:
-        gray = cv2.bitwise_not(gray)
-
-    gray = cv2.resize(gray, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
-
-    denoised = cv2.fastNlMeansDenoising(gray, h=10)
-
-    binary = cv2.adaptiveThreshold(
-        denoised, 255,
-        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY, 21, 10
-    )
-
-    return binary
+try:
+    import easyocr
+    EASYOCR_AVAILABLE = True
+except ImportError:
+    EASYOCR_AVAILABLE = False
+    print("[WARN] EasyOCR not installed. Install with: pip install easyocr")
 
 
-def extract_all_text(img_path):
-    processed = preprocess_camera_image(img_path)
-
-    configs = [
-        '--oem 3 --psm 6',
-        '--oem 3 --psm 4',
-        '--oem 3 --psm 11',
-    ]
-
-    all_text = []
-
-    for config in configs:
-        text = pytesseract.image_to_string(processed, config=config)
-        all_text.append(text)
-
-    final_text = '\n'.join(all_text)
-
-    # DEBUG DUMP
-    with open("debug.json", "w") as f:
-        json.dump({"raw_text": final_text}, f)
-
-    print("\nOCR TEXT PREVIEW:\n")
-    print(final_text[:500])
-
-    return final_text
+# Initialize reader once globally (expensive operation)
+_reader = None
 
 
-def parse_payment_details(text, expected_amount=None):
+def get_ocr_reader():
+    """Get or create OCR reader"""
+    global _reader
+    if _reader is None:
+        print("[OCR] Initializing EasyOCR reader...")
+        # Suppress verbose output and progress bars
+        import warnings
+        warnings.filterwarnings('ignore')
+
+        # Redirect stderr to suppress progress bars
+        import io
+        import contextlib
+
+        f = io.StringIO()
+        with contextlib.redirect_stderr(f):
+            _reader = easyocr.Reader(['en'], verbose=False, gpu=False)
+
+        print("[OCR] Reader initialized successfully")
+    return _reader
+
+
+def extract_text_easyocr(img_path):
+    """Extract text using EasyOCR - much more accurate than Tesseract"""
+    if not EASYOCR_AVAILABLE:
+        raise Exception("EasyOCR not installed. Run: pip install easyocr")
+
+    reader = get_ocr_reader()
+
+    # Extract text from image
+    results = reader.readtext(img_path)
+
+    # Combine all text blocks into one string
+    full_text = ""
+    for detection in results:
+        text = detection[1]
+        confidence = detection[2]
+        # Only include high confidence text
+        if confidence > 0.3:
+            full_text += text + " "
+
+    print("[OCR] Text extracted successfully")
+    print("[OCR] Preview:", full_text[:300])
+
+    # Save raw OCR output for debugging
+    debug_data = {"raw_text": full_text, "method": "EasyOCR", "confidence_threshold": 0.3}
+    with open(os.path.join(os.path.dirname(__file__), "debug.json"), "w") as f:
+        json.dump(debug_data, f)
+
+    return full_text
+
+
+def extract_amount(text, expected_amount=None):
+    """
+    Extract payment amount from text.
+    Looking for: ₹120, Rs 60, INR 80, etc.
+    """
     results = {
         'amount': None,
-        'order_id': None,
-        'date': None,
-        'time': None,
-        'receiver_upi': None,
-        'receiver_name': None,
-        'upi_transaction_id': None,
+        'receiver_upi': None
     }
 
-    # Amount detection
-    # Tesseract mangles ₹ into €, ?, or garbage characters.
-    # Strategy: Don't depend on the currency symbol at all.
-    # Instead, use CONTEXTUAL EXTRACTION — in GPay receipts the amount
-    # always appears as a standalone number between the sender's phone
-    # number and the "Completed" status line.
-    
-    # Also normalize the text: replace / with 7 when adjacent to digits
-    # (Tesseract commonly misreads 7 as /)
-    norm = text
-    # Tesseract misreads ₹ as various characters - normalize them all
-    norm = norm.replace('\u20ac', '₹')    # € -> ₹
-    norm = norm.replace('\ufffd', '₹')    # replacement char -> ₹
-    norm = norm.replace('\u00b0', '₹')    # ° (degree sign) -> ₹  ← actual culprit
-    # Tesseract also misreads 7 as / — fix it right after a ₹ symbol
-    norm = re.sub(r'₹\s*/(\d)', r'₹7\1', norm)
+    # Normalize text
+    norm = text.lower()
 
-    # --- Method 1: Contextual extraction ---
-    # Find text between a phone number (+91...) and "Completed"
-    context_match = re.search(
-        r'\+91[\d\s]+\n+(.*?)(?:@\s*)?Completed',
-        norm, re.DOTALL | re.IGNORECASE
-    )
-    context_amount = None
-    if context_match:
-        region = context_match.group(1).strip()
-        # Look for any number in this region (strip non-digit OCR noise)
-        nums = re.findall(r'(\d+)', region)
-        for n in nums:
-            val = int(n)
-            if 1 <= val <= 99999:  # reasonable payment amount
-                context_amount = str(val)
-                break
-
-    # --- Method 2: If we have an expected amount, search anywhere ---
+    # If we have expected amount, search for it first (most reliable)
     if expected_amount:
-        # Direct search for the expected amount
-        safe_pat = rf'(?:^|\D){expected_amount}(?:$|\D)'
-        if re.search(safe_pat, norm):
-            results['amount'] = expected_amount
-        # Also check if Tesseract prepended a '2' (common hallucination)
-        elif re.search(rf'(?:^|\D)2{expected_amount}(?:$|\D)', norm):
-            results['amount'] = expected_amount
-        # Check the contextual amount we found
-        elif context_amount == expected_amount:
-            results['amount'] = expected_amount
-        # Tesseract might prepend '2' to contextual amount too
-        elif context_amount and context_amount.startswith('2') and context_amount[1:] == expected_amount:
-            results['amount'] = expected_amount
+        expected_str = str(expected_amount).strip()
+        print(f"[SEARCH] Looking for expected amount: {expected_str}")
 
-    # --- Method 3: Fallback guess from context ---
-    if not results['amount'] and context_amount:
-        # If context found '2XX' and XX is a reasonable amount, strip the '2' prefix
-        if len(context_amount) >= 2 and context_amount.startswith('2'):
-            stripped = context_amount[1:]
-            if int(stripped) > 0:
-                results['amount'] = stripped
-            else:
-                results['amount'] = context_amount
-        else:
-            results['amount'] = context_amount
+        # Strategy 1: Exact match anywhere
+        if expected_str in norm:
+            results['amount'] = expected_str
+            print(f"[OK] Found exact amount: {expected_str}")
+            return results
 
-    # --- Method 4: Last resort - symbol-based ---
-    if not results['amount']:
-        for pattern in [r'[₹]\s*(\d+)', r'Rs\.?\s*(\d+)', r'INR\s*(\d+)', r'\b(\d+)\.00\b']:
-            match = re.search(pattern, norm)
-            if match:
-                amt = match.group(1)
-                if len(amt) <= 5 and int(amt) > 0:
-                    results['amount'] = amt
-                    break
+        # Strategy 2: Handle 0 read as O
+        expected_with_O = expected_str.replace("0", "o")
+        if expected_with_O in norm:
+            results['amount'] = expected_str
+            print(f"[OK] Found amount (0 as O): {expected_str}")
+            return results
 
+        # Strategy 3: With currency symbols (flexible)
+        for currency in ['₹', 'rs', 'rupee', 'inr', 'r', 'r.']:
+            # Try with space
+            pattern = rf'{re.escape(currency)}\s*{expected_str}'
+            if re.search(pattern, norm, re.IGNORECASE):
+                results['amount'] = expected_str
+                print(f"[OK] Found amount with currency: {expected_str}")
+                return results
 
-    # Order ID
-    order_patterns = [
-        r'\b(RD\d+)\b',
-        r'\b([A-Z]{2,3}\d{3,})\b'
+            # Try with O instead of 0
+            pattern = rf'{re.escape(currency)}\s*{expected_with_O}'
+            if re.search(pattern, norm, re.IGNORECASE):
+                results['amount'] = expected_str
+                print(f"[OK] Found amount with currency (O as 0): {expected_str}")
+                return results
+
+        # Strategy 4: With space or special chars
+        pattern = rf'[^a-z0-9]{expected_str}[^a-z0-9]'
+        if re.search(pattern, norm):
+            results['amount'] = expected_str
+            print(f"[OK] Found amount with boundaries: {expected_str}")
+            return results
+
+        # Strategy 5: With O instead of 0 and space/special
+        pattern = rf'[^a-z0-9]{expected_with_O}[^a-z0-9]'
+        if re.search(pattern, norm):
+            results['amount'] = expected_str
+            print(f"[OK] Found amount with O boundaries: {expected_str}")
+            return results
+
+        print(f"[FAIL] Could not find expected amount: {expected_str}")
+        print(f"[INFO] Searching in text: {norm[:200]}")
+
+    # Fallback: Extract any amount pattern if no expected amount or match failed
+    amount_patterns = [
+        (r'[₹r]\s*(\d+)', 'rupee symbol'),
+        (r'rs[\.\s]*(\d+)', 'rs'),
+        (r'inr\s*(\d+)', 'inr'),
+        (r'\b(\d{2,5})\s*(?:rupee|inr|rs|₹)', 'amount before currency'),
     ]
 
-    for pattern in order_patterns:
-        match = re.search(pattern, text)
+    for pattern, desc in amount_patterns:
+        match = re.search(pattern, norm, re.IGNORECASE)
         if match:
-            results['order_id'] = match.group(1)
-            break
+            amt = match.group(1)
+            if 10 <= int(amt) <= 99999:  # reasonable amount range
+                results['amount'] = amt
+                print(f"[OK] Fallback: Found amount ({desc}): {amt}")
+                return results
 
-    # Receiver UPI (Smart extraction)
-    # We want to find the UPI associated with "To:" to avoid grabbing the sender's UPI
-    # Pattern looks for "To: [Name] [UPI]", allowing '? ' which OCR often substitutes for '7'
-    receiver_upi_patterns = [
-        r'To:?\s+.*?\s+([a-z0-9\.\-_\?]+@[a-z]+)',
-        r'([a-z0-9\.\-_\?]+@[a-z]+)' # Fallback to first one found
-    ]
-    
-    for pattern in receiver_upi_patterns:
-        match = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
-        if match:
-            extracted_upi = match.group(1).lower()
-            # Sanitize common OCR typos where 7 is read as ?
-            extracted_upi = extracted_upi.replace('?', '7')
-            results['receiver_upi'] = extracted_upi
-            break
-
-    # Transaction ID
-    txn_match = re.search(r'\b(\d{10,})\b', text)
-    if txn_match:
-        results['upi_transaction_id'] = txn_match.group(1)
-
+    print("[FAIL] No amount found in text")
     return results
 
 
-import sys
+def extract_upi(text):
+    """Extract UPI ID from text with fuzzy matching"""
+    # UPI format: username@bank
+    upi_pattern = r'([a-z0-9._-]+@[a-z0-9]+)'
+    matches = re.findall(upi_pattern, text.lower())
+
+    if not matches:
+        print("[INFO] No UPI found in text")
+        return None
+
+    # Known UPI bank domains
+    known_banks = [
+        'okhdfcbank', 'okaxis', 'okicici', 'okibsl', 'okhbank',  # OK domains
+        'paytm', 'upi', 'ibl', 'hdfc', 'icic', 'axis',  # Generic
+        'google', 'phonepe', 'whatsapp', 'airtel',  # New apps
+    ]
+
+    print(f"[INFO] Found {len(matches)} email-like patterns")
+
+    for upi in matches:
+        if '@' not in upi:
+            continue
+
+        username, domain = upi.split('@', 1)
+
+        # Try exact match with known banks
+        if any(bank in domain for bank in known_banks):
+            print(f"[OK] Found valid UPI: {upi}")
+            return upi
+
+        # Try fuzzy matching if no exact match
+        # Find the best matching known bank for this domain
+        best_match = None
+        best_score = 0.8  # 80% similarity threshold
+
+        for known_bank in known_banks:
+            similarity = SequenceMatcher(None, domain, known_bank).ratio()
+            if similarity > best_score:
+                best_score = similarity
+                best_match = known_bank
+
+        if best_match:
+            corrected_upi = f"{username}@{best_match}"
+            print(f"[OK] Found UPI (fuzzy match {best_score:.0%}): {corrected_upi}")
+            return corrected_upi
+
+    # Fallback: return first match even if domain isn't recognized
+    print(f"[INFO] Using first match (unrecognized domain): {matches[0]}")
+    return matches[0]
+
+
+def parse_payment(img_path, expected_amount=None):
+    """Main extraction function"""
+    print(f"\n[START] Extracting payment details from: {img_path}")
+
+    try:
+        # Extract text using EasyOCR
+        text = extract_text_easyocr(img_path)
+
+        # Extract amount
+        print("\n[AMOUNT] Extracting amount...")
+        results = extract_amount(text, expected_amount)
+
+        # Extract UPI
+        print("[UPI] Extracting UPI ID...")
+        upi = extract_upi(text)
+        results['receiver_upi'] = upi
+
+        print(f"\n[RESULT] Amount: {results['amount']}, UPI: {results['receiver_upi']}")
+
+        return results
+
+    except Exception as e:
+        print(f"[ERROR] Extraction failed: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return {'amount': None, 'receiver_upi': None, 'error': str(e)}
+
 
 def save_json(results, output_filename="payment_details.json"):
+    """Save results to JSON file"""
     base_dir = os.path.dirname(os.path.abspath(__file__))
     json_path = os.path.join(base_dir, output_filename)
 
-    # ⚠️ IMPORTANT: no utf-8, no emojis → avoids Windows crash
     with open(json_path, "w") as f:
         json.dump(results, f, indent=2)
 
-    print("JSON saved at:", json_path)
+    print(f"[SAVE] JSON saved at: {json_path}")
 
 
 def main():
-    output_filename = "payment_details.json"
+    """Main entry point - called by Node.js"""
     try:
         base_dir = os.path.dirname(os.path.abspath(__file__))
-        
-        # Read dynamic filenames and explicit target amount from Node.js
+
+        # Read arguments from Node.js
         input_filename = sys.argv[1] if len(sys.argv) > 1 else "payment.jpg"
         output_filename = sys.argv[2] if len(sys.argv) > 2 else "payment_details.json"
         expected_amount = sys.argv[3] if len(sys.argv) > 3 else None
-        
+
         img_path = os.path.join(base_dir, input_filename)
 
-        print("FULL IMAGE PATH:", img_path)
+        print("=" * 60)
+        print("[INIT] Payment OCR Processing")
+        print(f"[INIT] Image: {input_filename}")
+        print(f"[INIT] Expected Amount: {expected_amount}")
+        print("=" * 60)
 
         if not os.path.exists(img_path):
-            raise Exception(f"{input_filename} file does not exist")
+            raise Exception(f"Image file not found: {img_path}")
 
-        text = extract_all_text(img_path)
-        results = parse_payment_details(text, expected_amount)
+        # Extract payment details
+        results = parse_payment(img_path, expected_amount)
 
+        # Save to JSON
         save_json(results, output_filename)
 
-        print("FINAL EXTRACTED DATA:", results)
+        # Print final results
+        print("\n" + "=" * 60)
+        print("[FINAL] Extracted Data:")
+        print(f"  Amount: {results.get('amount', 'NOT FOUND')}")
+        print(f"  UPI: {results.get('receiver_upi', 'NOT FOUND')}")
+        print("=" * 60)
 
     except Exception as e:
-        error_path = os.path.join(os.path.dirname(__file__), "payment_details.json")
+        print(f"\n[FATAL] {str(e)}")
 
+        # Save error result
+        error_result = {
+            'amount': None,
+            'receiver_upi': None,
+            'error': str(e)
+        }
+
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        error_path = os.path.join(base_dir, "payment_details.json")
         with open(error_path, "w") as f:
-            json.dump({"error": str(e)}, f)
-
-        print("ERROR:", str(e))
+            json.dump(error_result, f)
 
 
 if __name__ == "__main__":

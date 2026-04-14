@@ -81,15 +81,28 @@ router.get("/", async (req,res)=>{
 
 // Update order (status/payment)
 router.put("/:id", async (req,res)=>{
-  const { id } = req.params;
+  try {
+    const { id } = req.params;
+    console.log(`[UPDATE] Attempting to update order ${id} with:`, req.body);
 
-  // Try by Mongo _id first, then fallback to our custom `id` field.
-  let order = await Order.findByIdAndUpdate(id, req.body, { new: true });
-  if (!order) {
-    order = await Order.findOneAndUpdate({ id }, req.body, { new: true });
+    // Try by Mongo _id first, then fallback to our custom `id` field.
+    let order = await Order.findByIdAndUpdate(id, req.body, { new: true });
+    if (!order) {
+      console.log(`[UPDATE] Not found by _id, trying custom id field...`);
+      order = await Order.findOneAndUpdate({ id }, req.body, { new: true });
+    }
+
+    if (!order) {
+      console.log(`[UPDATE] Order not found: ${id}`);
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    console.log(`[UPDATE] Order updated successfully:`, order._id, "paid:", order.paid);
+    res.json(order);
+  } catch (err) {
+    console.error("Failed to update order:", err.message);
+    res.status(500).json({ error: `Failed to update order: ${err.message}` });
   }
-
-  res.json(order);
 });
 
 module.exports = router;

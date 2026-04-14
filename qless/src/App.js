@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from "react";
 import axios from "axios";
+import PaymentCameraModal from "./components/PaymentCameraModal";
+import DigitalPaymentVerificationPage from "./components/DigitalPaymentVerificationPage";
 
-// ── DATA ──────────────────────────────────────────────────────────────────────
+// ── DATA ────────────────────────────────────────────────────────────────────────
 const INITIAL_MENU = [
   { id: 1, name: "Masala Dosa", price: 60, category: "Breakfast", inStock: false, quantity: 0, image: "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7e/Masala_dosa.jpg/640px-Masala_dosa.jpg" },
   { id: 2, name: "Idli Vada", price: 50, category: "Breakfast", inStock: false, quantity: 0, image: "https://upload.wikimedia.org/wikipedia/commons/thumb/6/68/Idli_Sambar.jpg/640px-Idli_Sambar.jpg" },
@@ -1029,57 +1031,113 @@ function useToast() {
 // ── LOGIN PAGE ────────────────────────────────────────────────────────────────
 function LoginPage({ onLogin }) {
   const [tab, setTab] = useState("user");
-  const [form, setForm] = useState({ id: "", password: "" });
+  const [isRegister, setIsRegister] = useState(false);
+  const [form, setForm] = useState({ id: "", password: "", confirmPassword: "" });
   const [showPw, setShowPw] = useState(false);
-  const [error, setError] = useState("");
+  const [errors, setErrors] = useState({ general: "", id: "", password: "", confirm: "" });
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async () => {
-    setError("");
+    setErrors({ general: "", id: "", password: "", confirm: "" });
 
     if (!form.id || !form.password) {
-      setError("Please enter Student ID and Password");
+      setErrors(e => ({ ...e, general: "Please fill in all fields" }));
       return;
     }
-    // Both User and Admin tabs now use the real backend API.
 
-    setLoading(true);
-    try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          studentId: form.id.trim().toUpperCase(),
-          password: form.password
-        })
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || "Invalid credentials");
+    if (isRegister && tab === "user") {
+      // Registration mode
+      if (!form.confirmPassword) {
+        setErrors(e => ({ ...e, confirm: "Please confirm password" }));
+        return;
+      }
+      if (form.password !== form.confirmPassword) {
+        setErrors(e => ({ ...e, password: "Passwords do not match" }));
+        return;
+      }
+      if (form.password.length < 4) {
+        setErrors(e => ({ ...e, password: "Password must be at least 4 characters" }));
         return;
       }
 
-      // Validate the user's role matches the selected tab
-      if (tab === "admin" && data.user.role !== "admin") {
-        setError("Invalid admin credentials.");
-        return;
-      }
-      if (tab === "user" && data.user.role === "admin") {
-        setError("Please use the Admin tab to log in.");
-        return;
-      }
+      // Register new student
+      setLoading(true);
+      try {
+        const res = await fetch("/api/auth/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            studentId: form.id.trim().toUpperCase(),
+            password: form.password,
+            name: form.id.trim().toUpperCase() // Use student ID as name for now
+          })
+        });
+        const data = await res.json();
 
-      // Assign correct role for the frontend
-      const userRole = data.user.role === "admin" ? "admin" : "user";
-      onLogin({ id: data.user.studentId, name: data.user.name, ...data.user, role: userRole });
-    } catch (err) {
-      console.error("Login error:", err);
-      setError("Server not reachable. Is the backend running?");
-    } finally {
-      setLoading(false);
+        if (!res.ok) {
+          if (data.error.includes("duplicate")) {
+            setErrors(e => ({ ...e, id: "Student ID already registered" }));
+          } else {
+            setErrors(e => ({ ...e, general: data.error || "Registration failed" }));
+          }
+          return;
+        }
+
+        // Auto-login after registration
+        const userRole = data.user.role === "admin" ? "admin" : "student";
+        onLogin({ id: data.user.studentId, name: data.user.name, ...data.user, role: userRole });
+      } catch (err) {
+        console.error("Registration error:", err);
+        setErrors(e => ({ ...e, general: "Server not reachable. Is the backend running?" }));
+      } finally {
+        setLoading(false);
+      }
+    } else {
+      // Login mode
+      setLoading(true);
+      try {
+        const res = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            studentId: form.id.trim().toUpperCase(),
+            password: form.password
+          })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setErrors(e => ({ ...e, general: data.error || "Invalid credentials" }));
+          return;
+        }
+
+        // Validate the user's role matches the selected tab
+        if (tab === "admin" && data.user.role !== "admin") {
+          setErrors(e => ({ ...e, general: "Invalid admin credentials." }));
+          return;
+        }
+        if (tab === "user" && data.user.role === "admin") {
+          setErrors(e => ({ ...e, general: "Please use the Admin tab to log in." }));
+          return;
+        }
+
+        // Assign correct role for the frontend
+        const userRole = data.user.role === "admin" ? "admin" : "user";
+        onLogin({ id: data.user.studentId, name: data.user.name, ...data.user, role: userRole });
+      } catch (err) {
+        console.error("Login error:", err);
+        setErrors(e => ({ ...e, general: "Server not reachable. Is the backend running?" }));
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
+  const handleTabSwitch = (newTab) => {
+    setTab(newTab);
+    setIsRegister(false);
+    setForm({ id: "", password: "", confirmPassword: "" });
+    setErrors({ general: "", id: "", password: "", confirm: "" });
+  };
 
   return (
     <div className="login-bg">
@@ -1090,24 +1148,31 @@ function LoginPage({ onLogin }) {
         </div>
         <div className="login-body">
           <div className="tab-switch">
-            <button className={`tab-btn ${tab === "user" ? "active" : ""}`} onClick={() => { setTab("user"); setError(""); }}>User</button>
-            <button className={`tab-btn ${tab === "admin" ? "active" : ""}`} onClick={() => { setTab("admin"); setError(""); }}>Admin</button>
+            <button className={`tab-btn ${tab === "user" ? "active" : ""}`} onClick={() => handleTabSwitch("user")}>User</button>
+            <button className={`tab-btn ${tab === "admin" ? "active" : ""}`} onClick={() => handleTabSwitch("admin")}>Admin</button>
           </div>
-          <div className="login-title">{tab === "user" ? "Student Login" : "Admin Login"}</div>
-          {error && <div className="error-msg">{error}</div>}
+          <div className="login-title">
+            {tab === "user"
+              ? (isRegister ? "Student Registration" : "Student Login")
+              : "Admin Login"}
+          </div>
+          {errors.general && <div className="error-msg">{errors.general}</div>}
+
           <div className="form-group">
             <input
-              className="form-input"
+              className={`form-input ${errors.id ? "input-error" : ""}`}
               placeholder={tab === "user" ? "Student ID (e.g. STU001)" : "Username"}
               value={form.id}
               onChange={e => setForm(f => ({ ...f, id: e.target.value }))}
               onKeyDown={e => e.key === "Enter" && handleSubmit()}
             />
+            {errors.id && <div style={{ color: "var(--coral)", fontSize: "0.8rem", marginTop: "5px" }}>{errors.id}</div>}
           </div>
+
           <div className="form-group">
             <div className="input-wrap">
               <input
-                className="form-input"
+                className={`form-input ${errors.password ? "input-error" : ""}`}
                 type={showPw ? "text" : "password"}
                 placeholder="Password"
                 value={form.password}
@@ -1116,11 +1181,39 @@ function LoginPage({ onLogin }) {
               />
               <button className="eye-btn" onClick={() => setShowPw(x => !x)}>{showPw ? "🙈" : "👁"}</button>
             </div>
+            {errors.password && <div style={{ color: "var(--coral)", fontSize: "0.8rem", marginTop: "5px" }}>{errors.password}</div>}
           </div>
+
+          {isRegister && tab === "user" && (
+            <div className="form-group">
+              <div className="input-wrap">
+                <input
+                  className={`form-input ${errors.confirm ? "input-error" : ""}`}
+                  type={showPw ? "text" : "password"}
+                  placeholder="Confirm Password"
+                  value={form.confirmPassword}
+                  onChange={e => setForm(f => ({ ...f, confirmPassword: e.target.value }))}
+                  onKeyDown={e => e.key === "Enter" && handleSubmit()}
+                />
+                <button className="eye-btn" onClick={() => setShowPw(x => !x)}>{showPw ? "🙈" : "👁"}</button>
+              </div>
+              {errors.confirm && <div style={{ color: "var(--coral)", fontSize: "0.8rem", marginTop: "5px" }}>{errors.confirm}</div>}
+            </div>
+          )}
+
           <button className="btn-primary" onClick={handleSubmit} disabled={loading}>
-            {loading ? "Signing in…" : "SIGN IN"}
+            {loading ? (isRegister ? "Creating account…" : "Signing in…") : (isRegister ? "CREATE ACCOUNT" : "SIGN IN")}
           </button>
-          <div className="forgot-link">Forgot your password?</div>
+
+          {tab === "user" && (
+            <div className="forgot-link" onClick={() => {
+              setIsRegister(!isRegister);
+              setErrors({ general: "", id: "", password: "", confirm: "" });
+              setForm({ id: "", password: "", confirmPassword: "" });
+            }}>
+              {isRegister ? "Already have an account? Sign in" : "Don't have an account? Register here"}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -1342,10 +1435,11 @@ function MenuPage({ user, menu, onLogout, onPlaceOrder, liveOrders, formatOrderN
 }
 
 // ── ADMIN PAGE ────────────────────────────────────────────────────────────────
-function AdminPage({ onLogout, menu, setMenu, liveOrders, setLiveOrders, formatOrderNumber }) {
+function AdminPage({ onLogout, menu, setMenu, liveOrders, setLiveOrders, formatOrderNumber, togglePayment }) {
   const [section, setSection] = useState("orders");
   const [newItem, setNewItem] = useState({ name: "", price: "", category: "Breakfast", quantity: 10 });
   const [toast, showToast] = useToast();
+  const [paymentVerificationOrder, setPaymentVerificationOrder] = useState(null);
 
   const safeLiveOrders = Array.isArray(liveOrders) ? liveOrders : [];
   const activeOrders = safeLiveOrders.filter(o => o.status !== "completed");
@@ -1374,7 +1468,7 @@ function AdminPage({ onLogout, menu, setMenu, liveOrders, setLiveOrders, formatO
 
     const newQty = Math.max(0, current.quantity + delta);
 
-    // Update UI first
+    // Update UI first (optimistic)
     setMenu(m =>
       m.map(i =>
         i.id === id ? { ...i, quantity: newQty, inStock: newQty > 0 } : i
@@ -1382,9 +1476,19 @@ function AdminPage({ onLogout, menu, setMenu, liveOrders, setLiveOrders, formatO
     );
 
     try {
-      await axios.put(`/api/menu/${id}`, { quantity: newQty });
+      console.log(`[MENU] Updating item ${id} quantity to ${newQty}`);
+      const res = await axios.put(`/api/menu/${id}`, { quantity: newQty });
+      console.log(`[MENU] Update successful:`, res.data);
+      showToast(`Quantity updated to ${newQty}`);
     } catch (err) {
-      console.error(err);
+      console.error("[MENU] Failed to update quantity:", err.response?.data || err.message);
+      // Revert UI if request fails
+      setMenu(m =>
+        m.map(i =>
+          i.id === id ? { ...i, quantity: current.quantity, inStock: current.quantity > 0 } : i
+        )
+      );
+      showToast(`Failed to update quantity: ${err.response?.data?.error || err.message}`, "error");
     }
   };
   const deleteItem = (id) => {
@@ -1411,15 +1515,17 @@ function AdminPage({ onLogout, menu, setMenu, liveOrders, setLiveOrders, formatO
     };
 
     try {
+      console.log("[MENU] Adding new item:", item);
       const res = await axios.post("/api/menu", item);
+      console.log("[MENU] Item added successfully:", res.data);
       const added = res.data;
       const addedQty = Number(added.qty ?? added.quantity ?? added.stock ?? 0);
       setMenu(m => [...m, { ...added, qty: addedQty, inStock: addedQty > 0 }]);
       setNewItem({ name: "", price: "", category: "Breakfast", quantity: 10 });
       showToast("Item added to menu!");
     } catch (err) {
-      console.error("Failed to add menu item", err);
-      showToast("Failed to add menu item.", "error");
+      console.error("[MENU] Failed to add menu item:", err.response?.data || err.message);
+      showToast(`Failed to add menu item: ${err.response?.data?.error || err.message}`, "error");
     }
   };
   const updateStatus = async (orderId, status) => {
@@ -1430,20 +1536,6 @@ function AdminPage({ onLogout, menu, setMenu, liveOrders, setLiveOrders, formatO
     } catch (err) {
       console.error("Failed to update order status", err);
       showToast("Failed to update order status", "error");
-    }
-  };
-
-  const togglePayment = async (orderId) => {
-    const order = (liveOrders || []).find(x => x._id === orderId);
-    if (!order) return;
-
-    try {
-      const res = await axios.put(`/api/orders/${orderId}`, { paid: !order.paid });
-      setLiveOrders(o => (o || []).map(x => (x._id === orderId ? res.data : x)));
-      showToast("Payment status updated.");
-    } catch (err) {
-      console.error("Failed to toggle payment", err);
-      showToast("Failed to toggle payment", "error");
     }
   };
 
@@ -1496,25 +1588,36 @@ function AdminPage({ onLogout, menu, setMenu, liveOrders, setLiveOrders, formatO
       <main className="admin-main">
         {section === "orders" && (
           <>
-            <div className="page-title">Incoming Orders</div>
-            <div className="stats-row">
-              <div className="stat-card coral">
-                <div className="stat-value">{activeOrders.length}</div>
-                <div className="stat-label">Active Orders</div>
-              </div>
-              <div className="stat-card teal">
-                <div className="stat-value">₹{totalRevenue}</div>
-                <div className="stat-label">Total Revenue</div>
-              </div>
-              <div className="stat-card green">
-                <div className="stat-value">{liveOrders.length}</div>
-                <div className="stat-label">Total Orders</div>
-              </div>
-              <div className="stat-card yellow">
-                <div className="stat-value">{inStockCount}</div>
-                <div className="stat-label">Items In Stock</div>
-              </div>
-            </div>
+            {/* View 1: Manual Payment */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+                  <div className="page-title">Incoming Orders</div>
+                  <button
+                    className="pay-toggle-btn"
+                    style={{ background: "var(--teal)", color: "var(--dark)", padding: "10px 16px", fontWeight: "600" }}
+                    onClick={() => window.open("/#/digital-verification", "PaymentVerification", "width=1024,height=768,menubar=no,toolbar=no")}
+                    title="Open digital payment verification in new tab"
+                  >
+                    🔍 Digital Verification
+                  </button>
+                </div>
+                <div className="stats-row">
+                  <div className="stat-card coral">
+                    <div className="stat-value">{activeOrders.length}</div>
+                    <div className="stat-label">Active Orders</div>
+                  </div>
+                  <div className="stat-card teal">
+                    <div className="stat-value">₹{totalRevenue}</div>
+                    <div className="stat-label">Total Revenue</div>
+                  </div>
+                  <div className="stat-card green">
+                    <div className="stat-value">{liveOrders.length}</div>
+                    <div className="stat-label">Total Orders</div>
+                  </div>
+                  <div className="stat-card yellow">
+                    <div className="stat-value">{inStockCount}</div>
+                    <div className="stat-label">Items In Stock</div>
+                  </div>
+                </div>
             {activeOrders.length === 0 ? (
               <div className="no-orders">
                 <div className="no-orders-icon">🎉</div>
@@ -1543,17 +1646,8 @@ function AdminPage({ onLogout, menu, setMenu, liveOrders, setLiveOrders, formatO
                         {order.paid ? "✔ Payment Done" : "⏳ Payment Pending"}
                       </span>
                       <button className="pay-toggle-btn" onClick={() => togglePayment(order._id)} title="Toggle payment status">
-                        {order.paid ? "Mark Pending" : "Mark Paid manually"}
+                        {order.paid ? "Mark Pending" : "✅ Mark Paid"}
                       </button>
-                      {!order.paid && (
-                        <button 
-                          className="status-btn ready" 
-                          style={{ marginLeft: "auto", padding: "4px 8px", fontSize: "0.8rem", background: "var(--teal)" }}
-                          onClick={() => verifyViaPi(order)}
-                        >
-                          📷 Verify via Pi
-                        </button>
-                      )}
                     </div>
                     <div className="live-order-footer">
                       <div className="live-order-total">₹{order.total}</div>
@@ -1656,6 +1750,18 @@ function AdminPage({ onLogout, menu, setMenu, liveOrders, setLiveOrders, formatO
           </>
         )}
       </main>
+
+      {paymentVerificationOrder && (
+        <PaymentCameraModal
+          order={paymentVerificationOrder}
+          onClose={() => setPaymentVerificationOrder(null)}
+          onSuccess={(updatedOrder) => {
+            setLiveOrders(o => o.map(x => x._id === updatedOrder._id ? updatedOrder : x));
+            setPaymentVerificationOrder(null);
+            showToast("✅ Payment verified successfully!");
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -1803,11 +1909,31 @@ export default function App() {
     return "#----";
   };
 
+  const togglePayment = async (orderId) => {
+    const order = (liveOrders || []).find(x => x._id === orderId);
+    if (!order) return;
+
+    try {
+      const res = await axios.put(`/api/orders/${orderId}`, { paid: !order.paid });
+      setLiveOrders(o => (o || []).map(x => (x._id === orderId ? res.data : x)));
+    } catch (err) {
+      console.error("Failed to toggle payment", err);
+    }
+  };
+
+  const isDigitalVerification = window.location.hash === "#/digital-verification";
+
   return (
     <>
       <style>{CSS}</style>
-      {!user && <LoginPage onLogin={handleLogin} />}
-      {(user?.role === "user" || user?.role === "student") && (
+      {isDigitalVerification && (
+        <DigitalPaymentVerificationPage
+          orders={liveOrders}
+          togglePayment={togglePayment}
+        />
+      )}
+      {!isDigitalVerification && !user && <LoginPage onLogin={handleLogin} />}
+      {!isDigitalVerification && (user?.role === "user" || user?.role === "student") && (
         <MenuPage
           user={user}
           menu={menu}
@@ -1817,7 +1943,7 @@ export default function App() {
           formatOrderNumber={formatOrderNumber}
         />
       )}
-      {user?.role === "admin" && (
+      {!isDigitalVerification && user?.role === "admin" && (
         <AdminPage
           onLogout={handleLogout}
           menu={menu}
@@ -1825,6 +1951,7 @@ export default function App() {
           liveOrders={liveOrders}
           setLiveOrders={setLiveOrders}
           formatOrderNumber={formatOrderNumber}
+          togglePayment={togglePayment}
         />
       )}
     </>
