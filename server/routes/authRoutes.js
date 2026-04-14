@@ -40,6 +40,7 @@ router.post("/login", async (req, res) => {
             user: {
                 studentId: user.studentId,
                 name: user.name,
+                email: user.email,
                 role: user.role
             }
         });
@@ -52,24 +53,57 @@ router.post("/login", async (req, res) => {
     }
 });
 
-// ── FORGOT PASSWORD ───────────────────────────────────────────────────────────
-router.post("/forgot-password", async (req, res) => {
+// ── VERIFY IDENTITY (Step 1 of password reset) ───────────────────────────────────────────
+// Verifies that the given studentId AND email belong to the same account.
+// This replaces the old dummy-login hack used in the frontend.
+router.post("/verify-identity", async (req, res) => {
     try {
-        let { studentId, newPassword } = req.body;
+        let { studentId, email } = req.body;
 
-        if (!studentId || !newPassword) {
-            return res.status(400).json({ error: "Student ID and new password are required" });
+        if (!studentId || !email) {
+            return res.status(400).json({ error: "Student ID and email are required" });
         }
 
         studentId = studentId.trim().toUpperCase();
+        email = email.trim().toLowerCase();
+
+        const user = await User.findOne({ studentId, email });
+        if (!user) {
+            return res.status(404).json({ error: "No account found with that Student ID and email combination" });
+        }
+
+        if (user.role === "admin") {
+            return res.status(403).json({ error: "Admin password cannot be reset here" });
+        }
+
+        console.log("🔑 Identity verified for reset:", studentId);
+        res.json({ message: "Identity verified" });
+    } catch (err) {
+        console.error("❌ VERIFY-IDENTITY CRASH:", err.message);
+        res.status(500).json({ error: "Server error", message: err.message });
+    }
+});
+
+// ── FORGOT PASSWORD ───────────────────────────────────────────────────────────
+router.post("/forgot-password", async (req, res) => {
+    try {
+        let { studentId, email, newPassword } = req.body;
+
+        if (!studentId || !email || !newPassword) {
+            return res.status(400).json({ error: "Student ID, email, and new password are required" });
+        }
+
+        studentId = studentId.trim().toUpperCase();
+        email = email.trim().toLowerCase();
 
         if (newPassword.length < 6) {
             return res.status(400).json({ error: "Password must be at least 6 characters" });
         }
 
-        const user = await User.findOne({ studentId });
+        // Verify BOTH studentId AND email before allowing password reset
+        const user = await User.findOne({ studentId, email });
         if (!user) {
-            return res.status(404).json({ error: "No account found with that Student ID" });
+            return res.status(404).json({ error: "No account found with that Student ID and email combination" });
         }
 
         if (user.role === "admin") {
@@ -77,7 +111,7 @@ router.post("/forgot-password", async (req, res) => {
         }
 
         const hashed = await bcrypt.hash(newPassword, 10);
-        await User.updateOne({ studentId }, { password: hashed });
+        await User.updateOne({ studentId, email }, { password: hashed });
 
         console.log("🔑 Password reset for:", studentId);
         res.json({ message: "Password reset successfully" });

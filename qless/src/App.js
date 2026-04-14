@@ -1085,7 +1085,7 @@ function LoginPage({ onLogin }) {
   const [tab, setTab] = useState("user"); // "user" | "admin" | "register" | "forgot"
   const [form, setForm] = useState({ id: "", password: "" });
   const [regForm, setRegForm] = useState({ name: "", email: "", password: "", confirm: "" });
-  const [forgotForm, setForgotForm] = useState({ studentId: "", newPassword: "", confirm: "" });
+  const [forgotForm, setForgotForm] = useState({ studentId: "", email: "", newPassword: "", confirm: "" });
   const [forgotStep, setForgotStep] = useState(1); // 1 = enter ID, 2 = enter new password
   const [showPw, setShowPw] = useState(false);
   const [showRegPw, setShowRegPw] = useState(false);
@@ -1093,8 +1093,16 @@ function LoginPage({ onLogin }) {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
+  const [registeredStudentId, setRegisteredStudentId] = useState(""); // set after successful registration
 
-  const switchTab = (t) => { setTab(t); setError(""); setSuccess(""); setForgotStep(1); setForgotForm({ studentId: "", newPassword: "", confirm: "" }); };
+  const switchTab = (t) => {
+    setTab(t);
+    setError("");
+    setSuccess("");
+    setRegisteredStudentId(""); // clear success card when switching tabs
+    setForgotStep(1);
+    setForgotForm({ studentId: "", email: "", newPassword: "", confirm: "" });
+  };
 
   // ── LOGIN ──
   const handleSubmit = async () => {
@@ -1120,7 +1128,6 @@ function LoginPage({ onLogin }) {
     }
   };
 
-  // ── REGISTER ──
   const handleRegister = async () => {
     setError(""); setSuccess("");
     if (!regForm.name || !regForm.email || !regForm.password || !regForm.confirm) {
@@ -1144,8 +1151,8 @@ function LoginPage({ onLogin }) {
       const data = await res.json();
       if (!res.ok) { setError(data.error || "Registration failed"); return; }
       setRegForm({ name: "", email: "", password: "", confirm: "" });
-      setSuccess(`✅ Account created! Your Student ID is: ${data.user.studentId} — use it to sign in.`);
-      setTimeout(() => switchTab("user"), 4000);
+      // Show a persistent ID card instead of a toast that auto-dismisses
+      setRegisteredStudentId(data.user.studentId);
     } catch (err) {
       setError("Server not reachable. Is the backend running?");
     } finally {
@@ -1153,22 +1160,23 @@ function LoginPage({ onLogin }) {
     }
   };
 
-  // ── FORGOT PASSWORD ──
   const handleForgotStep1 = async () => {
     setError(""); setSuccess("");
     if (!forgotForm.studentId.trim()) { setError("Please enter your Student ID"); return; }
+    if (!forgotForm.email.trim()) { setError("Please enter your registered email"); return; }
     setLoading(true);
     try {
-      // Ping login with a dummy password — 404 = user not found, 400 = user exists
-      const res = await fetch("/api/auth/login", {
+      // Use the dedicated verify-identity endpoint — checks both studentId AND email
+      const res = await fetch("/api/auth/verify-identity", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ studentId: forgotForm.studentId.trim(), password: "__VERIFY_ONLY__" })
+        body: JSON.stringify({
+          studentId: forgotForm.studentId.trim().toUpperCase(),
+          email: forgotForm.email.trim().toLowerCase()
+        })
       });
       const data = await res.json();
-      if (res.status === 404) { setError("No account found with that Student ID"); return; }
-      if (data.error && data.error.includes("Admin")) { setError("Admin password cannot be reset here"); return; }
-      // Any other response (400 = wrong password) means the ID exists — proceed to step 2
+      if (!res.ok) { setError(data.error || "Verification failed"); return; }
       setForgotStep(2);
     } catch (err) {
       setError("Server not reachable. Is the backend running?");
@@ -1187,11 +1195,16 @@ function LoginPage({ onLogin }) {
       const res = await fetch("/api/auth/forgot-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ studentId: forgotForm.studentId.trim(), newPassword: forgotForm.newPassword })
+        // Re-send studentId + email so server re-verifies identity before saving new password
+        body: JSON.stringify({
+          studentId: forgotForm.studentId.trim(),
+          email: forgotForm.email.trim().toLowerCase(),
+          newPassword: forgotForm.newPassword
+        })
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error || "Reset failed"); return; }
-      setForgotForm({ studentId: "", newPassword: "", confirm: "" });
+      setForgotForm({ studentId: "", email: "", newPassword: "", confirm: "" });
       setForgotStep(1);
       setSuccess("✅ Password reset! You can now sign in.");
       setTimeout(() => switchTab("user"), 2000);
@@ -1264,52 +1277,117 @@ function LoginPage({ onLogin }) {
           {/* ── REGISTER ── */}
           {tab === "register" && (
             <>
-              <div className="login-title">Create Account</div>
-              <div className="form-group">
-                <input
-                  className="form-input"
-                  placeholder="Full Name"
-                  value={regForm.name}
-                  onChange={e => setRegForm(f => ({ ...f, name: e.target.value }))}
-                />
-              </div>
-              <div className="form-group">
-                <input
-                  className="form-input"
-                  type="email"
-                  placeholder="College Email (e.g. john@college.edu)"
-                  value={regForm.email}
-                  onChange={e => setRegForm(f => ({ ...f, email: e.target.value }))}
-                />
-              </div>
-              <div className="form-group">
-                <div className="input-wrap">
-                  <input
-                    className="form-input"
-                    type={showRegPw ? "text" : "password"}
-                    placeholder="Password (min 6 chars)"
-                    value={regForm.password}
-                    onChange={e => setRegForm(f => ({ ...f, password: e.target.value }))}
-                  />
-                  <button className="eye-btn" onClick={() => setShowRegPw(x => !x)}>{showRegPw ? "🙈" : "👁"}</button>
+              {registeredStudentId ? (
+                /* ── SUCCESS CARD: shown after registration ── */
+                <div style={{
+                  textAlign: "center",
+                  padding: "8px 0",
+                  animation: "fadeIn 0.4s ease"
+                }}>
+                  <div style={{ fontSize: "2.5rem", marginBottom: "8px" }}>🎉</div>
+                  <div style={{ fontWeight: 700, fontSize: "1.1rem", color: "var(--text)", marginBottom: "4px" }}>
+                    Account Created!
+                  </div>
+                  <div style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "20px" }}>
+                    Save your Student ID — you'll need it to sign in.
+                  </div>
+
+                  {/* ID box */}
+                  <div style={{
+                    background: "rgba(var(--coral-rgb, 255,100,80), 0.1)",
+                    border: "2px dashed var(--coral)",
+                    borderRadius: "12px",
+                    padding: "16px 20px",
+                    marginBottom: "16px"
+                  }}>
+                    <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: "6px", letterSpacing: "0.05em", textTransform: "uppercase" }}>Your Student ID</div>
+                    <div style={{ fontSize: "1.6rem", fontWeight: 800, color: "var(--coral)", letterSpacing: "0.08em" }}>
+                      {registeredStudentId}
+                    </div>
+                  </div>
+
+                  {/* Copy button */}
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(registeredStudentId)
+                        .then(() => setSuccess("✅ Student ID copied to clipboard!"))
+                        .catch(() => setSuccess(`Your ID: ${registeredStudentId}`));
+                    }}
+                    style={{
+                      background: "transparent",
+                      border: "1px solid var(--border)",
+                      color: "var(--text-muted)",
+                      borderRadius: "8px",
+                      padding: "8px 20px",
+                      cursor: "pointer",
+                      fontSize: "0.85rem",
+                      marginBottom: "12px",
+                      width: "100%"
+                    }}
+                  >
+                    📋 Copy ID to Clipboard
+                  </button>
+                  {success && <div className="success-msg" style={{ marginBottom: "12px" }}>{success}</div>}
+
+                  {/* Go to login */}
+                  <button
+                    className="btn-primary"
+                    onClick={() => switchTab("user")}
+                  >
+                    Go to Sign In →
+                  </button>
                 </div>
-              </div>
-              <div className="form-group">
-                <input
-                  className="form-input"
-                  type="password"
-                  placeholder="Confirm Password"
-                  value={regForm.confirm}
-                  onChange={e => setRegForm(f => ({ ...f, confirm: e.target.value }))}
-                  onKeyDown={e => e.key === "Enter" && handleRegister()}
-                />
-              </div>
-              <button className="btn-primary" onClick={handleRegister} disabled={loading}>
-                {loading ? "Creating account…" : "CREATE ACCOUNT"}
-              </button>
-              <div className="forgot-link" onClick={() => switchTab("user")}>
-                Already have an account? <span style={{color:"var(--coral)"}}>Sign in</span>
-              </div>
+              ) : (
+                /* ── REGISTRATION FORM ── */
+                <>
+                  <div className="login-title">Create Account</div>
+                  <div className="form-group">
+                    <input
+                      className="form-input"
+                      placeholder="Full Name"
+                      value={regForm.name}
+                      onChange={e => setRegForm(f => ({ ...f, name: e.target.value }))}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <input
+                      className="form-input"
+                      type="email"
+                      placeholder="College Email (e.g. john@college.edu)"
+                      value={regForm.email}
+                      onChange={e => setRegForm(f => ({ ...f, email: e.target.value }))}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <div className="input-wrap">
+                      <input
+                        className="form-input"
+                        type={showRegPw ? "text" : "password"}
+                        placeholder="Password (min 6 chars)"
+                        value={regForm.password}
+                        onChange={e => setRegForm(f => ({ ...f, password: e.target.value }))}
+                      />
+                      <button className="eye-btn" onClick={() => setShowRegPw(x => !x)}>{showRegPw ? "🙈" : "👁"}</button>
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <input
+                      className="form-input"
+                      type="password"
+                      placeholder="Confirm Password"
+                      value={regForm.confirm}
+                      onChange={e => setRegForm(f => ({ ...f, confirm: e.target.value }))}
+                      onKeyDown={e => e.key === "Enter" && handleRegister()}
+                    />
+                  </div>
+                  <button className="btn-primary" onClick={handleRegister} disabled={loading}>
+                    {loading ? "Creating account…" : "CREATE ACCOUNT"}
+                  </button>
+                  <div className="forgot-link" onClick={() => switchTab("user")}>
+                    Already have an account? <span style={{color:"var(--coral)"}}>Sign in</span>
+                  </div>
+                </>
+              )}
             </>
           )}
 
@@ -1325,24 +1403,33 @@ function LoginPage({ onLogin }) {
                 <div className={`step-dot ${forgotStep >= 2 ? "done" : ""}`}>2</div>
               </div>
               <div className="step-labels">
-                <span style={{color: forgotStep === 1 ? "var(--coral)" : "var(--text-muted)"}}>Verify ID</span>
+                <span style={{color: forgotStep === 1 ? "var(--coral)" : "var(--text-muted)"}}>Verify Identity</span>
                 <span style={{color: forgotStep === 2 ? "var(--coral)" : "var(--text-muted)"}}>New Password</span>
               </div>
 
-              {/* Step 1 — enter Student ID */}
+              {/* Step 1 — enter Student ID + email */}
               {forgotStep === 1 && (
                 <>
                   <div className="form-group" style={{marginTop:"20px"}}>
                     <input
                       className="form-input"
-                      placeholder="Your Student ID (e.g. STU001)"
+                      placeholder="Student ID (e.g. STU847362)"
                       value={forgotForm.studentId}
                       onChange={e => setForgotForm(f => ({ ...f, studentId: e.target.value }))}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <input
+                      className="form-input"
+                      type="email"
+                      placeholder="Registered Email"
+                      value={forgotForm.email}
+                      onChange={e => setForgotForm(f => ({ ...f, email: e.target.value }))}
                       onKeyDown={e => e.key === "Enter" && handleForgotStep1()}
                     />
                   </div>
                   <button className="btn-primary" onClick={handleForgotStep1} disabled={loading}>
-                    {loading ? "Verifying…" : "VERIFY STUDENT ID →"}
+                    {loading ? "Verifying…" : "VERIFY IDENTITY →"}
                   </button>
                 </>
               )}
@@ -1352,6 +1439,8 @@ function LoginPage({ onLogin }) {
                 <>
                   <p style={{textAlign:"center", color:"var(--text-muted)", fontSize:"0.85rem", margin:"16px 0 12px"}}>
                     Setting new password for <strong style={{color:"var(--teal)"}}>{forgotForm.studentId.toUpperCase()}</strong>
+                    {" "}&middot;{" "}
+                    <span style={{color:"var(--text-muted)"}}>{forgotForm.email.toLowerCase()}</span>
                   </p>
                   <div className="form-group">
                     <div className="input-wrap">
@@ -1379,7 +1468,7 @@ function LoginPage({ onLogin }) {
                     {loading ? "Resetting…" : "RESET PASSWORD"}
                   </button>
                   <div className="forgot-link" onClick={() => { setForgotStep(1); setError(""); }}>
-                    ← Use a different Student ID
+                    ← Use different details
                   </div>
                 </>
               )}
