@@ -1396,11 +1396,11 @@ function LoginPage({ onLogin }) {
 
 
 // ── MENU PAGE ─────────────────────────────────────────────────────────────────
-function MenuPage({ user, menu, onLogout, onPlaceOrder, liveOrders, formatOrderNumber }) {
+function MenuPage({ user, menu, onLogout, onPlaceOrder, onCancelOrder, liveOrders, formatOrderNumber }) {
   const [category, setCategory] = useState("All");
   const [cart, setCart] = useState({});
   const [cartOpen, setCartOpen] = useState(false);
-  const [view, setView] = useState("menu"); // "menu" | "orders"
+  const [view, setView] = useState("menu"); // "menu" | "account"
   const [toast, showToast] = useToast();
 
   // Filter orders belonging to this student only
@@ -1467,8 +1467,8 @@ function MenuPage({ user, menu, onLogout, onPlaceOrder, liveOrders, formatOrderN
       <nav className="nav">
         <div className="nav-logo">Q-Less <span>🍔</span></div>
         <div className="nav-right">
-          <button className="nav-btn" onClick={() => setView(v => v === "menu" ? "orders" : "menu")}>
-            {view === "menu" ? "📋 My Orders" : "🍽 Menu"}
+          <button className="nav-btn" onClick={() => setView(v => v === "menu" ? "account" : "menu")}>
+            {view === "menu" ? "👤 My Account" : "🍽 Menu"}
           </button>
           <button className="cart-btn" onClick={() => setCartOpen(true)}>
             🛒 Cart
@@ -1527,7 +1527,21 @@ function MenuPage({ user, menu, onLogout, onPlaceOrder, liveOrders, formatOrderN
         </>
       ) : (
         <div className="orders-section">
-          <div className="orders-title">My Orders</div>
+          {/* PROFILE CARD */}
+          <div className="profile-card" style={{ padding: "24px", background: "var(--surface)", borderRadius: "16px", border: "1px solid var(--border)", marginBottom: "32px", display: "flex", alignItems: "center", gap: "24px", boxShadow: "0 8px 24px rgba(0,0,0,0.2)" }}>
+            <div style={{ width: "72px", height: "72px", borderRadius: "50%", background: "linear-gradient(135deg, var(--coral), #ff8a65)", color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "2rem", fontWeight: "bold", flexShrink: 0, boxShadow: "0 4px 12px rgba(255, 107, 107, 0.4)" }}>
+              {user?.name ? user.name.charAt(0).toUpperCase() : "S"}
+            </div>
+            <div>
+              <h2 style={{ margin: "0 0 6px 0", color: "var(--text)", fontSize: "1.5rem" }}>{user?.name || "Student"}</h2>
+              <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", color: "var(--text-muted)", fontSize: "0.95rem" }}>
+                <span><strong>ID:</strong> {user?.id}</span>
+                {user?.email && <span><strong>Email:</strong> {user.email}</span>}
+              </div>
+            </div>
+          </div>
+
+          <div className="orders-title">Order History</div>
           {orders.length === 0 ? (
             <div className="no-orders">
               <div className="no-orders-icon">📋</div>
@@ -1542,11 +1556,37 @@ function MenuPage({ user, menu, onLogout, onPlaceOrder, liveOrders, formatOrderN
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "6px" }}>
                   <div className={`order-status status-${o.status}`}>
-                    {o.status === "preparing" ? "⏳ Preparing" : o.status === "ready" ? "✅ Ready" : "✔ Completed"}
+                    {o.status === "preparing" ? "⏳ Preparing" : o.status === "ready" ? "✅ Ready" : o.status === "cancelled" ? "❌ Cancelled" : "✔ Completed"}
                   </div>
                   <span className={`pay-badge ${o.paid ? "paid" : "pending"}`}>
                     {o.paid ? "✔ Payment Done" : "⏳ Payment Pending"}
                   </span>
+                  {o.status === "preparing" && (
+                    <button 
+                      className="delete-btn" 
+                      onClick={async (e) => {
+                        const btn = e.currentTarget;
+                        btn.style.opacity = "0.5";
+                        btn.style.pointerEvents = "none";
+                        try {
+                          await onCancelOrder(o._id || o.id);
+                          showToast("Order cancelled successfully.");
+                        } catch(err) {
+                          btn.style.opacity = "1";
+                          btn.style.pointerEvents = "auto";
+                          showToast("Failed to cancel order.", "error");
+                        }
+                      }}
+                      style={{ 
+                        marginTop: "4px", padding: "4px 8px", fontSize: "0.8rem", 
+                        background: "rgba(239, 68, 68, 0.1)", color: "var(--red)", 
+                        border: "1px solid var(--red)", borderRadius: "4px", 
+                        cursor: "pointer"
+                      }}
+                    >
+                      Cancel Order
+                    </button>
+                  )}
                 </div>
               </div>
               <div className="order-items">
@@ -1616,7 +1656,7 @@ function AdminPage({ onLogout, menu, setMenu, liveOrders, setLiveOrders, formatO
   const [toast, showToast] = useToast();
 
   const safeLiveOrders = Array.isArray(liveOrders) ? liveOrders : [];
-  const activeOrders = safeLiveOrders.filter(o => o.status !== "completed");
+  const activeOrders = safeLiveOrders.filter(o => o.status !== "completed" && o.status !== "cancelled");
   const totalRevenue = safeLiveOrders.reduce((s, o) => s + (o.total || 0), 0);
   const inStockCount = Array.isArray(menu) ? menu.filter(m => getQty(m) > 0).length : 0;
 
@@ -1636,24 +1676,30 @@ function AdminPage({ onLogout, menu, setMenu, liveOrders, setLiveOrders, formatO
     return () => clearInterval(intervalId);
   }, [setLiveOrders]);
 
-  const updateQty = async (id, delta) => {
+  const updateTimeouts = useRef({});
+
+  const updateQty = (id, delta) => {
     const current = menu.find(i => i.id === id);
     if (!current) return;
 
-    const newQty = Math.max(0, current.quantity + delta);
+    const newQty = Math.max(0, Number(current.quantity || 0) + delta);
 
-    // Update UI first
-    setMenu(m =>
-      m.map(i =>
-        i.id === id ? { ...i, quantity: newQty, inStock: newQty > 0 } : i
-      )
-    );
+    // Update UI purely
+    setMenu(m => m.map(i => i.id === id ? { ...i, quantity: newQty, inStock: newQty > 0 } : i));
 
-    try {
-      await axios.put(`/api/menu/${id}`, { quantity: newQty });
-    } catch (err) {
-      console.error(err);
+    // Side effect (debounce sync to server) MUST NOT be inside setMenu()
+    if (updateTimeouts.current[id]) {
+      clearTimeout(updateTimeouts.current[id]);
     }
+    
+    updateTimeouts.current[id] = setTimeout(async () => {
+      try {
+        await axios.put(`/api/menu/${id}`, { quantity: newQty });
+      } catch (err) {
+        console.error(err);
+        showToast(`Failed to save quantity for ${current.name}`, "error");
+      }
+    }, 300);
   };
   const deleteItem = (id) => {
     const idNum = Number(id);
@@ -1663,7 +1709,6 @@ function AdminPage({ onLogout, menu, setMenu, liveOrders, setLiveOrders, formatO
   const addItem = async () => {
     if (!newItem.name.trim() || !newItem.price) { showToast("Fill in item name and price.", "error"); return; }
 
-    // Keep menu item IDs small and sequential (avoid huge timestamp IDs).
     const existingIds = (menu || []).map((i) => Number(i.id)).filter((n) => Number.isFinite(n) && n < 1e9);
     const nextId = (existingIds.length ? Math.max(...existingIds) : 0) + 1;
 
@@ -1681,8 +1726,9 @@ function AdminPage({ onLogout, menu, setMenu, liveOrders, setLiveOrders, formatO
     try {
       const res = await axios.post("/api/menu", item);
       const added = res.data;
-      const addedQty = Number(added.qty ?? added.quantity ?? added.stock ?? 0);
-      setMenu(m => [...m, { ...added, qty: addedQty, inStock: addedQty > 0 }]);
+      const addedQty = Number(added.quantity ?? added.qty ?? added.stock ?? 0);
+      const normalized = { ...added, quantity: addedQty, inStock: addedQty > 0 };
+      setMenu(m => [...m, normalized]);
       setNewItem({ name: "", price: "", category: "Breakfast", quantity: 10 });
       showToast("Item added to menu!");
     } catch (err) {
@@ -1956,7 +2002,7 @@ export default function App() {
       setUser(null);
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const [menu, setMenu] = useLocalStorage("qless_menu", INITIAL_MENU);
+  const [menu, setMenu] = useState(INITIAL_MENU);
   const [liveOrders, setLiveOrders] = useLocalStorage("qless_orders", []);
 
   const logoutTimer = useRef(null);
@@ -2059,6 +2105,38 @@ export default function App() {
     }
   };
 
+  const handleCancelOrder = async (orderId) => {
+    // Fire optimistic UI update globally
+    setLiveOrders(orders => orders.map(o => {
+      if (o._id === orderId || o.id === orderId) {
+        return { ...o, status: "cancelled" };
+      }
+      return o;
+    }));
+
+    try {
+      // Sync with MongoDB
+      await axios.put(`/api/orders/${orderId}/cancel`);
+      
+      // Async stock refresh (no await needed for UI)
+      axios.get("/api/menu").then(m => {
+        const normalize = (item) => ({ ...item, quantity: Number(item.quantity ?? 0), inStock: Number(item.quantity ?? 0) > 0 });
+        setMenu((m.data || []).map(normalize));
+      }).catch(console.error);
+
+    } catch (err) {
+      console.error(err);
+      // Revert optimistic update
+      setLiveOrders(orders => orders.map(o => {
+        if (o._id === orderId || o.id === orderId) {
+          return { ...o, status: "preparing" };
+        }
+        return o;
+      }));
+      throw err;
+    }
+  };
+
   const formatOrderNumber = (input) => {
     const order = typeof input === "object" ? input : null;
     const n = order ? order.orderNumber : input;
@@ -2081,6 +2159,7 @@ export default function App() {
           menu={menu}
           onLogout={handleLogout}
           onPlaceOrder={handlePlaceOrder}
+          onCancelOrder={handleCancelOrder}
           liveOrders={liveOrders}
           formatOrderNumber={formatOrderNumber}
         />

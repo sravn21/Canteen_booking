@@ -92,4 +92,53 @@ router.put("/:id", async (req,res)=>{
   res.json(order);
 });
 
+// Cancel order and restore stock
+router.put("/:id/cancel", async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Find the order
+    let order = await Order.findById(id);
+    if (!order) {
+      order = await Order.findOne({ id });
+    }
+
+    if (!order) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    if (order.status !== "preparing") {
+      return res.status(400).json({ error: "Only preparing orders can be cancelled." });
+    }
+    
+    if (order.status === "cancelled") {
+      return res.status(400).json({ error: "Order is already cancelled." });
+    }
+
+    // Restore quantites for each item
+    const Menu = require("../models/FoodItems");
+    for (const item of order.items) {
+      // item.id could be string "1", Menu.id is Number
+      const qtyToRestore = Number(item.qty || item.quantity || 0);
+      
+      await Menu.findOneAndUpdate(
+        { id: Number(item.id) },
+        { 
+          $inc: { quantity: qtyToRestore },
+          $set: { inStock: true }
+        }
+      );
+    }
+
+    // Update the order status
+    order.status = "cancelled";
+    await order.save();
+
+    res.json(order);
+  } catch (err) {
+    console.error("Order Cancellation Error:", err);
+    res.status(500).json({ error: "Failed to cancel order" });
+  }
+});
+
 module.exports = router;
