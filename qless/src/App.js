@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import axios from "axios";
+import AdminPaymentVerification from "./components/AdminPaymentVerification";
 
 // ── DATA ──────────────────────────────────────────────────────────────────────
 const INITIAL_MENU = [
@@ -1965,6 +1966,10 @@ function AdminPage({ onLogout, menu, setMenu, liveOrders, setLiveOrders, formatO
             <span className="side-link-icon">🍽</span>
             <span>Manage Menu</span>
           </button>
+          <button className={`side-link ${section === "payment" ? "active" : ""}`} onClick={() => setSection("payment")}>
+            <span className="side-link-icon">💳</span>
+            <span>Payment Verify</span>
+          </button>
         </nav>
         <div className="sidebar-footer">
           <button className="logout-side" onClick={onLogout}>↩ Logout</button>
@@ -2133,7 +2138,17 @@ function AdminPage({ onLogout, menu, setMenu, liveOrders, setLiveOrders, formatO
             </div>
           </>
         )}
+
+        {section === "payment" && (
+          <AdminPaymentVerification
+            orders={safeLiveOrders}
+            togglePayment={togglePayment}
+            setPaymentVerificationOrder={() => {}}
+            onBack={() => setSection("orders")}
+          />
+        )}
       </main>
+
     </div>
   );
 }
