@@ -23,9 +23,10 @@ export default function DigitalPaymentVerificationPage({ orders, togglePayment }
     return () => clearInterval(interval);
   }, []);
 
-  // Filter orders by Student ID
+  // Filter orders by Student ID and exclude completed/cancelled orders
   const filteredOrders = liveOrders.filter(order =>
-    order.studentId && order.studentId.toLowerCase().includes(searchStudentId.toLowerCase())
+    order.studentId && order.studentId.toLowerCase().includes(searchStudentId.toLowerCase()) && 
+    order.status !== "completed" && order.status !== "cancelled"
   );
 
   const handleCameraModalClose = () => {

@@ -11,6 +11,13 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+      lowercase: true,
+      match: [/.+@.+\..+/, "Please provide a valid email address"]
+    },
     password: {
       type: String,
       required: true,
@@ -19,6 +26,14 @@ const userSchema = new mongoose.Schema(
       type: String,
       enum: ["student", "admin"],
       default: "student",
+    },
+    resetToken: {
+      type: String,
+      default: null
+    },
+    resetTokenExpiry: {
+      type: Date,
+      default: null
     },
   },
   {

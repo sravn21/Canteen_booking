@@ -105,4 +105,53 @@ router.put("/:id", async (req,res)=>{
   }
 });
 
+// Cancel order by ID
+router.post("/:orderId/cancel", async (req, res) => {
+  try {
+    console.log("🚫 [1] Cancel order request for orderId:", req.params.orderId);
+    
+    const { studentId } = req.body;
+    console.log("🚫 [2] studentId from request:", studentId);
+
+    if (!req.params.orderId || !studentId) {
+      return res.status(400).json({ error: "Missing orderId or studentId" });
+    }
+
+    // Find the order
+    const order = await Order.findById(req.params.orderId);
+    console.log("🚫 [3] Order found:", !!order);
+
+    if (!order) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    // Verify student ownership
+    if (order.studentId !== studentId.toString().toUpperCase()) {
+      console.log("🚫 [4] Student ID mismatch. Order:", order.studentId, "Request:", studentId);
+      return res.status(403).json({ error: "You can only cancel your own orders" });
+    }
+
+    // Check if order can be cancelled (not already completed or cancelled)
+    if (order.status === "completed" || order.status === "cancelled") {
+      console.log("🚫 [5] Order already done/cancelled, status:", order.status);
+      return res.status(400).json({ error: `Cannot cancel order with status: ${order.status}` });
+    }
+
+    // Update order status to cancelled
+    order.status = "cancelled";
+    await order.save();
+    console.log("🚫 [6] Order cancelled successfully");
+
+    res.json({
+      success: true,
+      message: "Order cancelled successfully",
+      order: order
+    });
+
+  } catch (err) {
+    console.error("❌ CANCEL ORDER CRASH:", err.message);
+    res.status(500).json({ error: "Server error", message: err.message });
+  }
+});
+
 module.exports = router;

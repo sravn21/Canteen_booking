@@ -1032,13 +1032,18 @@ function useToast() {
 function LoginPage({ onLogin }) {
   const [tab, setTab] = useState("user");
   const [isRegister, setIsRegister] = useState(false);
-  const [form, setForm] = useState({ id: "", password: "", confirmPassword: "" });
+  const [isForgot, setIsForgot] = useState(false);
+  const [isVerified, setIsVerified] = useState(false);
+  const [form, setForm] = useState({ id: "", email: "", password: "", confirmPassword: "" });
+  const [forgotForm, setForgotForm] = useState({ id: "", email: "" });
+  const [resetPassword, setResetPassword] = useState({ newPassword: "", confirmPassword: "" });
+  const [resetToken, setResetToken] = useState(null);
   const [showPw, setShowPw] = useState(false);
-  const [errors, setErrors] = useState({ general: "", id: "", password: "", confirm: "" });
+  const [errors, setErrors] = useState({ general: "", id: "", email: "", password: "", confirm: "" });
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async () => {
-    setErrors({ general: "", id: "", password: "", confirm: "" });
+    setErrors({ general: "", id: "", email: "", password: "", confirm: "" });
 
     if (!form.id || !form.password) {
       setErrors(e => ({ ...e, general: "Please fill in all fields" }));
@@ -1047,6 +1052,14 @@ function LoginPage({ onLogin }) {
 
     if (isRegister && tab === "user") {
       // Registration mode
+      if (!form.email) {
+        setErrors(e => ({ ...e, email: "Please enter your email" }));
+        return;
+      }
+      if (!form.email.includes("@")) {
+        setErrors(e => ({ ...e, email: "Please enter a valid email" }));
+        return;
+      }
       if (!form.confirmPassword) {
         setErrors(e => ({ ...e, confirm: "Please confirm password" }));
         return;
@@ -1068,6 +1081,7 @@ function LoginPage({ onLogin }) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             studentId: form.id.trim().toUpperCase(),
+            email: form.email.trim(),
             password: form.password,
             name: form.id.trim().toUpperCase() // Use student ID as name for now
           })
@@ -1077,6 +1091,8 @@ function LoginPage({ onLogin }) {
         if (!res.ok) {
           if (data.error.includes("duplicate")) {
             setErrors(e => ({ ...e, id: "Student ID already registered" }));
+          } else if (data.error.includes("email")) {
+            setErrors(e => ({ ...e, email: data.error || "Registration failed" }));
           } else {
             setErrors(e => ({ ...e, general: data.error || "Registration failed" }));
           }
@@ -1135,8 +1151,105 @@ function LoginPage({ onLogin }) {
   const handleTabSwitch = (newTab) => {
     setTab(newTab);
     setIsRegister(false);
-    setForm({ id: "", password: "", confirmPassword: "" });
-    setErrors({ general: "", id: "", password: "", confirm: "" });
+    setIsForgot(false);
+    setIsVerified(false);
+    setForm({ id: "", email: "", password: "", confirmPassword: "" });
+    setForgotForm({ id: "", email: "" });
+    setResetPassword({ newPassword: "", confirmPassword: "" });
+    setResetToken(null);
+    setErrors({ general: "", id: "", email: "", password: "", confirm: "" });
+  };
+
+  const handleForgotPassword = async () => {
+    setErrors({ general: "", id: "", email: "", password: "", confirm: "" });
+
+    if (!forgotForm.id || !forgotForm.email) {
+      setErrors(e => ({ ...e, general: "Please enter your Student ID and Email" }));
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentId: forgotForm.id.trim().toUpperCase(),
+          email: forgotForm.email.trim()
+        })
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setErrors(e => ({ ...e, general: data.error || "Verification failed" }));
+        return;
+      }
+
+      // Verification successful
+      setResetToken(data.token);
+      setIsVerified(true);
+      setErrors(e => ({ ...e, general: "Verification successful! Now set your new password." }));
+    } catch (err) {
+      console.error("Forgot password error:", err);
+      setErrors(e => ({ ...e, general: "Server not reachable. Is the backend running?" }));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    setErrors({ general: "", id: "", email: "", password: "", confirm: "" });
+
+    if (!resetPassword.newPassword || !resetPassword.confirmPassword) {
+      setErrors(e => ({ ...e, general: "Please enter and confirm your new password" }));
+      return;
+    }
+
+    if (resetPassword.newPassword !== resetPassword.confirmPassword) {
+      setErrors(e => ({ ...e, general: "Passwords do not match" }));
+      return;
+    }
+
+    if (resetPassword.newPassword.length < 4) {
+      setErrors(e => ({ ...e, general: "Password must be at least 4 characters" }));
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentId: forgotForm.id.trim().toUpperCase(),
+          email: forgotForm.email.trim(),
+          newPassword: resetPassword.newPassword,
+          resetToken: resetToken
+        })
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setErrors(e => ({ ...e, general: data.error || "Password reset failed" }));
+        return;
+      }
+
+      // Reset successful
+      setErrors(e => ({ ...e, general: "✅ Password reset successful! You can now login with your new password." }));
+      setTimeout(() => {
+        setIsForgot(false);
+        setIsVerified(false);
+        setForgotForm({ id: "", email: "" });
+        setResetPassword({ newPassword: "", confirmPassword: "" });
+        setResetToken(null);
+        setErrors({ general: "", id: "", email: "", password: "", confirm: "" });
+      }, 2000);
+    } catch (err) {
+      console.error("Reset password error:", err);
+      setErrors(e => ({ ...e, general: "Server not reachable. Is the backend running?" }));
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -1153,23 +1266,119 @@ function LoginPage({ onLogin }) {
           </div>
           <div className="login-title">
             {tab === "user"
-              ? (isRegister ? "Student Registration" : "Student Login")
+              ? (isForgot ? (isVerified ? "Reset Password" : "Forgot Password") : (isRegister ? "Student Registration" : "Student Login"))
               : "Admin Login"}
           </div>
           {errors.general && <div className="error-msg">{errors.general}</div>}
 
-          <div className="form-group">
-            <input
-              className={`form-input ${errors.id ? "input-error" : ""}`}
-              placeholder={tab === "user" ? "Student ID (e.g. STU001)" : "Username"}
-              value={form.id}
-              onChange={e => setForm(f => ({ ...f, id: e.target.value }))}
-              onKeyDown={e => e.key === "Enter" && handleSubmit()}
-            />
-            {errors.id && <div style={{ color: "var(--coral)", fontSize: "0.8rem", marginTop: "5px" }}>{errors.id}</div>}
-          </div>
+          {isForgot ? (
+            <>
+              {!isVerified ? (
+                <>
+                  <div className="form-group">
+                    <input
+                      className={`form-input ${errors.id ? "input-error" : ""}`}
+                      placeholder="Student ID"
+                      value={forgotForm.id}
+                      onChange={e => setForgotForm(f => ({ ...f, id: e.target.value }))}
+                      onKeyDown={e => e.key === "Enter" && handleForgotPassword()}
+                    />
+                    {errors.id && <div style={{ color: "var(--coral)", fontSize: "0.8rem", marginTop: "5px" }}>{errors.id}</div>}
+                  </div>
 
-          <div className="form-group">
+                  <div className="form-group">
+                    <input
+                      className={`form-input ${errors.email ? "input-error" : ""}`}
+                      type="email"
+                      placeholder="Registered Email"
+                      value={forgotForm.email}
+                      onChange={e => setForgotForm(f => ({ ...f, email: e.target.value }))}
+                      onKeyDown={e => e.key === "Enter" && handleForgotPassword()}
+                    />
+                    {errors.email && <div style={{ color: "var(--coral)", fontSize: "0.8rem", marginTop: "5px" }}>{errors.email}</div>}
+                  </div>
+
+                  <button className="btn-primary" onClick={handleForgotPassword} disabled={loading}>
+                    {loading ? "Verifying…" : "Verify & Continue"}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="form-group">
+                    <div className="input-wrap">
+                      <input
+                        className={`form-input ${errors.password ? "input-error" : ""}`}
+                        type={showPw ? "text" : "password"}
+                        placeholder="New Password"
+                        value={resetPassword.newPassword}
+                        onChange={e => setResetPassword(f => ({ ...f, newPassword: e.target.value }))}
+                        onKeyDown={e => e.key === "Enter" && handleResetPassword()}
+                      />
+                      <button className="eye-btn" onClick={() => setShowPw(x => !x)}>{showPw ? "🙈" : "👁"}</button>
+                    </div>
+                    {errors.password && <div style={{ color: "var(--coral)", fontSize: "0.8rem", marginTop: "5px" }}>{errors.password}</div>}
+                  </div>
+
+                  <div className="form-group">
+                    <div className="input-wrap">
+                      <input
+                        className={`form-input ${errors.confirm ? "input-error" : ""}`}
+                        type={showPw ? "text" : "password"}
+                        placeholder="Confirm Password"
+                        value={resetPassword.confirmPassword}
+                        onChange={e => setResetPassword(f => ({ ...f, confirmPassword: e.target.value }))}
+                        onKeyDown={e => e.key === "Enter" && handleResetPassword()}
+                      />
+                      <button className="eye-btn" onClick={() => setShowPw(x => !x)}>{showPw ? "🙈" : "👁"}</button>
+                    </div>
+                    {errors.confirm && <div style={{ color: "var(--coral)", fontSize: "0.8rem", marginTop: "5px" }}>{errors.confirm}</div>}
+                  </div>
+
+                  <button className="btn-primary" onClick={handleResetPassword} disabled={loading}>
+                    {loading ? "Resetting…" : "Reset Password"}
+                  </button>
+                </>
+              )}
+
+              <div className="forgot-link" onClick={() => {
+                setIsForgot(false);
+                setIsVerified(false);
+                setForgotForm({ id: "", email: "" });
+                setResetPassword({ newPassword: "", confirmPassword: "" });
+                setResetToken(null);
+                setErrors({ general: "", id: "", email: "", password: "", confirm: "" });
+              }}>
+                ← Back to Login
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="form-group">
+                <input
+                  className={`form-input ${errors.id ? "input-error" : ""}`}
+                  placeholder={tab === "user" ? "Student ID (e.g. STU001)" : "Username"}
+                  value={form.id}
+                  onChange={e => setForm(f => ({ ...f, id: e.target.value }))}
+                  onKeyDown={e => e.key === "Enter" && handleSubmit()}
+                />
+                {errors.id && <div style={{ color: "var(--coral)", fontSize: "0.8rem", marginTop: "5px" }}>{errors.id}</div>}
+              </div>
+
+              {isRegister && tab === "user" && (
+                <div className="form-group">
+                  <input
+                    className={`form-input ${errors.email ? "input-error" : ""}`}
+                    type="email"
+                    placeholder="Email Address"
+                    value={form.email}
+                    onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                    onKeyDown={e => e.key === "Enter" && handleSubmit()}
+                  />
+                  {errors.email && <div style={{ color: "var(--coral)", fontSize: "0.8rem", marginTop: "5px" }}>{errors.email}</div>}
+                </div>
+              )}
+
+              <div className="form-group">
             <div className="input-wrap">
               <input
                 className={`form-input ${errors.password ? "input-error" : ""}`}
@@ -1206,13 +1415,26 @@ function LoginPage({ onLogin }) {
           </button>
 
           {tab === "user" && (
-            <div className="forgot-link" onClick={() => {
-              setIsRegister(!isRegister);
-              setErrors({ general: "", id: "", password: "", confirm: "" });
-              setForm({ id: "", password: "", confirmPassword: "" });
-            }}>
-              {isRegister ? "Already have an account? Sign in" : "Don't have an account? Register here"}
+            <div>
+              <div className="forgot-link" onClick={() => {
+                setIsRegister(!isRegister);
+                setErrors({ general: "", id: "", email: "", password: "", confirm: "" });
+                setForm({ id: "", email: "", password: "", confirmPassword: "" });
+              }}>
+                {isRegister ? "Already have an account? Sign in" : "Don't have an account? Register here"}
+              </div>
+              {!isRegister && (
+                <div className="forgot-link" onClick={() => {
+                  setIsForgot(true);
+                  setForgotForm({ id: "", email: "" });
+                  setErrors({ general: "", id: "", email: "", password: "", confirm: "" });
+                }}>
+                  Forgot your password?
+                </div>
+              )}
             </div>
+          )}
+            </>
           )}
         </div>
       </div>
@@ -1283,6 +1505,33 @@ function MenuPage({ user, menu, onLogout, onPlaceOrder, liveOrders, formatOrderN
       showToast("Order placed successfully! 🎉");
     } catch (err) {
       showToast("Failed to place order. Please try again.", "error");
+    }
+  };
+
+  const handleCancelOrder = async (orderId) => {
+    if (!window.confirm("Are you sure you want to cancel this order?")) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/orders/${orderId}/cancel`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ studentId: user.id })
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        showToast(data.error || "Failed to cancel order", "error");
+        return;
+      }
+
+      showToast("✅ Order cancelled successfully", "success");
+      // Trigger a refresh of orders by triggering a refetch
+      // This will be handled by the parent component's polling
+    } catch (err) {
+      console.error("Cancel order error:", err);
+      showToast("Server error while cancelling order", "error");
     }
   };
 
@@ -1358,28 +1607,88 @@ function MenuPage({ user, menu, onLogout, onPlaceOrder, liveOrders, formatOrderN
               <div className="no-orders-icon">📋</div>
               You haven't placed any orders yet.
             </div>
-          ) : orders.map(o => (
-            <div key={o._id || o.orderNumber} className="order-card">
-              <div className="order-header">
+          ) : (
+            <>
+              {/* Current Orders */}
+              {orders.filter(o => o.status !== "completed" && o.status !== "cancelled").length > 0 && (
+                <div style={{ marginBottom: "30px" }}>
+                  <div style={{ fontSize: "14px", fontWeight: "600", marginBottom: "12px", color: "#666" }}>📦 Current Order</div>
+                  {orders
+                    .filter(o => o.status !== "completed" && o.status !== "cancelled")
+                    .map(o => (
+                      <div key={o._id || o.orderNumber} className="order-card">
+                        <div className="order-header">
+                          <div>
+                            <div className="order-id">{formatOrderNumber(o)}</div>
+                            <div className="order-time">{o.time}</div>
+                          </div>
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "6px" }}>
+                            <div className={`order-status status-${o.status}`}>
+                              {o.status === "preparing" ? "⏳ Preparing" : o.status === "ready" ? "✅ Ready" : "✔ Completed"}
+                            </div>
+                            <span className={`pay-badge ${o.paid ? "paid" : "pending"}`}>
+                              {o.paid ? "✔ Payment Done" : "⏳ Payment Pending"}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="order-items">
+                          {o.items.map(i => `${i.name} × ${i.qty}`).join("  •  ")}
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "12px" }}>
+                          <div className="order-total">₹{o.total}</div>
+                          <button 
+                            style={{
+                              padding: "6px 12px",
+                              backgroundColor: "#ff6b6b",
+                              color: "white",
+                              border: "none",
+                              borderRadius: "4px",
+                              cursor: "pointer",
+                              fontSize: "12px",
+                              fontWeight: "500"
+                            }}
+                            onClick={() => handleCancelOrder(o._id)}
+                          >
+                            Cancel Order
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              )}
+
+              {/* Previous Orders */}
+              {orders.filter(o => o.status === "completed" || o.status === "cancelled").length > 0 && (
                 <div>
-                  <div className="order-id">{formatOrderNumber(o)}</div>
-                  <div className="order-time">{o.time}</div>
+                  <div style={{ fontSize: "14px", fontWeight: "600", marginBottom: "12px", color: "#666" }}>📜 Previous Orders</div>
+                  {orders
+                    .filter(o => o.status === "completed" || o.status === "cancelled")
+                    .map(o => (
+                      <div key={o._id || o.orderNumber} className="order-card" style={{ opacity: 0.7 }}>
+                        <div className="order-header">
+                          <div>
+                            <div className="order-id">{formatOrderNumber(o)}</div>
+                            <div className="order-time">{o.time}</div>
+                          </div>
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "6px" }}>
+                            <div className={`order-status status-${o.status}`}>
+                              {o.status === "cancelled" ? "❌ Cancelled" : "✔ Completed"}
+                            </div>
+                            <span className={`pay-badge ${o.paid ? "paid" : "pending"}`}>
+                              {o.paid ? "✔ Payment Done" : "⏳ Payment Pending"}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="order-items">
+                          {o.items.map(i => `${i.name} × ${i.qty}`).join("  •  ")}
+                        </div>
+                        <div className="order-total">₹{o.total}</div>
+                      </div>
+                    ))}
                 </div>
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "6px" }}>
-                  <div className={`order-status status-${o.status}`}>
-                    {o.status === "preparing" ? "⏳ Preparing" : o.status === "ready" ? "✅ Ready" : "✔ Completed"}
-                  </div>
-                  <span className={`pay-badge ${o.paid ? "paid" : "pending"}`}>
-                    {o.paid ? "✔ Payment Done" : "⏳ Payment Pending"}
-                  </span>
-                </div>
-              </div>
-              <div className="order-items">
-                {o.items.map(i => `${i.name} × ${i.qty}`).join("  •  ")}
-              </div>
-              <div className="order-total">₹{o.total}</div>
-            </div>
-          ))}
+              )}
+            </>
+          )}
         </div>
       )}
 
@@ -1442,7 +1751,7 @@ function AdminPage({ onLogout, menu, setMenu, liveOrders, setLiveOrders, formatO
   const [paymentVerificationOrder, setPaymentVerificationOrder] = useState(null);
 
   const safeLiveOrders = Array.isArray(liveOrders) ? liveOrders : [];
-  const activeOrders = safeLiveOrders.filter(o => o.status !== "completed");
+  const activeOrders = safeLiveOrders.filter(o => o.status !== "completed" && o.status !== "cancelled");
   const totalRevenue = safeLiveOrders.reduce((s, o) => s + (o.total || 0), 0);
   const inStockCount = Array.isArray(menu) ? menu.filter(m => getQty(m) > 0).length : 0;
 
