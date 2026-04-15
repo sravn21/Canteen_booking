@@ -1,9 +1,7 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import axios from "axios";
-import PaymentCameraModal from "./components/PaymentCameraModal";
-import DigitalPaymentVerificationPage from "./components/DigitalPaymentVerificationPage";
 
-// ── DATA ────────────────────────────────────────────────────────────────────────
+// ── DATA ──────────────────────────────────────────────────────────────────────
 const INITIAL_MENU = [
   { id: 1, name: "Masala Dosa", price: 60, category: "Breakfast", inStock: false, quantity: 0, image: "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7e/Masala_dosa.jpg/640px-Masala_dosa.jpg" },
   { id: 2, name: "Idli Vada", price: 50, category: "Breakfast", inStock: false, quantity: 0, image: "https://upload.wikimedia.org/wikipedia/commons/thumb/6/68/Idli_Sambar.jpg/640px-Idli_Sambar.jpg" },
@@ -229,6 +227,59 @@ const CSS = `
     font-size: 0.88rem;
     margin-bottom: 16px;
     text-align: center;
+  }
+
+  .success-msg {
+    background: rgba(34,197,94,0.15);
+    border: 1px solid rgba(34,197,94,0.4);
+    color: #86efac;
+    padding: 10px 14px;
+    border-radius: 10px;
+    font-size: 0.88rem;
+    margin-bottom: 16px;
+    text-align: center;
+    animation: fadeIn 0.3s ease;
+  }
+
+  /* ── STEP INDICATOR (Forgot Password) ── */
+  .step-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    margin: 8px 0 0;
+  }
+  .step-dot {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    background: var(--dark3);
+    border: 2px solid var(--border);
+    color: var(--text-muted);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.8rem; font-weight: 700;
+    transition: all 0.3s ease;
+    z-index: 1;
+  }
+  .step-dot.done {
+    background: var(--coral);
+    border-color: var(--coral);
+    color: white;
+    box-shadow: 0 0 12px rgba(255,107,91,0.4);
+  }
+  .step-line {
+    flex: 1; max-width: 80px; height: 2px;
+    background: var(--border);
+    transition: background 0.3s ease;
+  }
+  .step-line.done { background: var(--coral); }
+  .step-labels {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 4px 0;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
   }
 
   /* ── MENU PAGE ── */
@@ -634,6 +685,7 @@ const CSS = `
   .status-preparing { background: rgba(245,158,11,0.2); color: var(--yellow); }
   .status-ready { background: rgba(34,197,94,0.2); color: var(--green); }
   .status-completed { background: rgba(139,163,193,0.15); color: var(--text-muted); }
+  .status-cancelled { background: rgba(239,68,68,0.15); color: var(--red); }
   .order-items { margin-bottom: 12px; font-size: 0.88rem; color: var(--text-muted); }
   .order-total {
     font-family: 'Syne', sans-serif;
@@ -1030,113 +1082,137 @@ function useToast() {
 
 // ── LOGIN PAGE ────────────────────────────────────────────────────────────────
 function LoginPage({ onLogin }) {
-  const [tab, setTab] = useState("user");
-  const [isRegister, setIsRegister] = useState(false);
-  const [form, setForm] = useState({ id: "", password: "", confirmPassword: "" });
+  const [tab, setTab] = useState("user"); // "user" | "admin" | "register" | "forgot"
+  const [form, setForm] = useState({ id: "", password: "" });
+  const [regForm, setRegForm] = useState({ name: "", email: "", password: "", confirm: "" });
+  const [forgotForm, setForgotForm] = useState({ studentId: "", email: "", newPassword: "", confirm: "" });
+  const [forgotStep, setForgotStep] = useState(1); // 1 = enter ID, 2 = enter new password
   const [showPw, setShowPw] = useState(false);
-  const [errors, setErrors] = useState({ general: "", id: "", password: "", confirm: "" });
+  const [showRegPw, setShowRegPw] = useState(false);
+  const [showForgotPw, setShowForgotPw] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
+  const [registeredStudentId, setRegisteredStudentId] = useState(""); // set after successful registration
 
+  const switchTab = (t) => {
+    setTab(t);
+    setError("");
+    setSuccess("");
+    setRegisteredStudentId(""); // clear success card when switching tabs
+    setForgotStep(1);
+    setForgotForm({ studentId: "", email: "", newPassword: "", confirm: "" });
+  };
+
+  // ── LOGIN ──
   const handleSubmit = async () => {
-    setErrors({ general: "", id: "", password: "", confirm: "" });
-
-    if (!form.id || !form.password) {
-      setErrors(e => ({ ...e, general: "Please fill in all fields" }));
-      return;
-    }
-
-    if (isRegister && tab === "user") {
-      // Registration mode
-      if (!form.confirmPassword) {
-        setErrors(e => ({ ...e, confirm: "Please confirm password" }));
-        return;
-      }
-      if (form.password !== form.confirmPassword) {
-        setErrors(e => ({ ...e, password: "Passwords do not match" }));
-        return;
-      }
-      if (form.password.length < 4) {
-        setErrors(e => ({ ...e, password: "Password must be at least 4 characters" }));
-        return;
-      }
-
-      // Register new student
-      setLoading(true);
-      try {
-        const res = await fetch("/api/auth/register", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            studentId: form.id.trim().toUpperCase(),
-            password: form.password,
-            name: form.id.trim().toUpperCase() // Use student ID as name for now
-          })
-        });
-        const data = await res.json();
-
-        if (!res.ok) {
-          if (data.error.includes("duplicate")) {
-            setErrors(e => ({ ...e, id: "Student ID already registered" }));
-          } else {
-            setErrors(e => ({ ...e, general: data.error || "Registration failed" }));
-          }
-          return;
-        }
-
-        // Auto-login after registration
-        const userRole = data.user.role === "admin" ? "admin" : "student";
-        onLogin({ id: data.user.studentId, name: data.user.name, ...data.user, role: userRole });
-      } catch (err) {
-        console.error("Registration error:", err);
-        setErrors(e => ({ ...e, general: "Server not reachable. Is the backend running?" }));
-      } finally {
-        setLoading(false);
-      }
-    } else {
-      // Login mode
-      setLoading(true);
-      try {
-        const res = await fetch("/api/auth/login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            studentId: form.id.trim().toUpperCase(),
-            password: form.password
-          })
-        });
-        const data = await res.json();
-        if (!res.ok) {
-          setErrors(e => ({ ...e, general: data.error || "Invalid credentials" }));
-          return;
-        }
-
-        // Validate the user's role matches the selected tab
-        if (tab === "admin" && data.user.role !== "admin") {
-          setErrors(e => ({ ...e, general: "Invalid admin credentials." }));
-          return;
-        }
-        if (tab === "user" && data.user.role === "admin") {
-          setErrors(e => ({ ...e, general: "Please use the Admin tab to log in." }));
-          return;
-        }
-
-        // Assign correct role for the frontend
-        const userRole = data.user.role === "admin" ? "admin" : "user";
-        onLogin({ id: data.user.studentId, name: data.user.name, ...data.user, role: userRole });
-      } catch (err) {
-        console.error("Login error:", err);
-        setErrors(e => ({ ...e, general: "Server not reachable. Is the backend running?" }));
-      } finally {
-        setLoading(false);
-      }
+    setError(""); setSuccess("");
+    if (!form.id || !form.password) { setError("Please enter Student ID and Password"); return; }
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ studentId: form.id.trim().toUpperCase(), password: form.password })
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error || "Invalid credentials"); return; }
+      if (tab === "admin" && data.user.role !== "admin") { setError("Invalid admin credentials."); return; }
+      if (tab === "user" && data.user.role === "admin") { setError("Please use the Admin tab to log in."); return; }
+      const userRole = data.user.role === "admin" ? "admin" : "user";
+      onLogin({ id: data.user.studentId, name: data.user.name, ...data.user, role: userRole });
+    } catch (err) {
+      setError("Server not reachable. Is the backend running?");
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleTabSwitch = (newTab) => {
-    setTab(newTab);
-    setIsRegister(false);
-    setForm({ id: "", password: "", confirmPassword: "" });
-    setErrors({ general: "", id: "", password: "", confirm: "" });
+  const handleRegister = async () => {
+    setError(""); setSuccess("");
+    if (!regForm.name || !regForm.email || !regForm.password || !regForm.confirm) {
+      setError("All fields are required"); return;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(regForm.email)) { setError("Please enter a valid college email"); return; }
+    if (regForm.password.length < 6) { setError("Password must be at least 6 characters"); return; }
+    if (regForm.password !== regForm.confirm) { setError("Passwords do not match"); return; }
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: regForm.name.trim(),
+          email: regForm.email.trim().toLowerCase(),
+          password: regForm.password
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error || "Registration failed"); return; }
+      setRegForm({ name: "", email: "", password: "", confirm: "" });
+      // Show a persistent ID card instead of a toast that auto-dismisses
+      setRegisteredStudentId(data.user.studentId);
+    } catch (err) {
+      setError("Server not reachable. Is the backend running?");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotStep1 = async () => {
+    setError(""); setSuccess("");
+    if (!forgotForm.studentId.trim()) { setError("Please enter your Student ID"); return; }
+    if (!forgotForm.email.trim()) { setError("Please enter your registered email"); return; }
+    setLoading(true);
+    try {
+      // Use the dedicated verify-identity endpoint — checks both studentId AND email
+      const res = await fetch("/api/auth/verify-identity", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentId: forgotForm.studentId.trim().toUpperCase(),
+          email: forgotForm.email.trim().toLowerCase()
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error || "Verification failed"); return; }
+      setForgotStep(2);
+    } catch (err) {
+      setError("Server not reachable. Is the backend running?");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotReset = async () => {
+    setError(""); setSuccess("");
+    if (!forgotForm.newPassword) { setError("Please enter a new password"); return; }
+    if (forgotForm.newPassword.length < 6) { setError("Password must be at least 6 characters"); return; }
+    if (forgotForm.newPassword !== forgotForm.confirm) { setError("Passwords do not match"); return; }
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        // Re-send studentId + email so server re-verifies identity before saving new password
+        body: JSON.stringify({
+          studentId: forgotForm.studentId.trim(),
+          email: forgotForm.email.trim().toLowerCase(),
+          newPassword: forgotForm.newPassword
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error || "Reset failed"); return; }
+      setForgotForm({ studentId: "", email: "", newPassword: "", confirm: "" });
+      setForgotStep(1);
+      setSuccess("✅ Password reset! You can now sign in.");
+      setTimeout(() => switchTab("user"), 2000);
+    } catch (err) {
+      setError("Server not reachable. Is the backend running?");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -1147,72 +1223,260 @@ function LoginPage({ onLogin }) {
           <p>Reserve your meals and skip the queue.</p>
         </div>
         <div className="login-body">
+          {/* ── TABS ── */}
           <div className="tab-switch">
-            <button className={`tab-btn ${tab === "user" ? "active" : ""}`} onClick={() => handleTabSwitch("user")}>User</button>
-            <button className={`tab-btn ${tab === "admin" ? "active" : ""}`} onClick={() => handleTabSwitch("admin")}>Admin</button>
-          </div>
-          <div className="login-title">
-            {tab === "user"
-              ? (isRegister ? "Student Registration" : "Student Login")
-              : "Admin Login"}
-          </div>
-          {errors.general && <div className="error-msg">{errors.general}</div>}
-
-          <div className="form-group">
-            <input
-              className={`form-input ${errors.id ? "input-error" : ""}`}
-              placeholder={tab === "user" ? "Student ID (e.g. STU001)" : "Username"}
-              value={form.id}
-              onChange={e => setForm(f => ({ ...f, id: e.target.value }))}
-              onKeyDown={e => e.key === "Enter" && handleSubmit()}
-            />
-            {errors.id && <div style={{ color: "var(--coral)", fontSize: "0.8rem", marginTop: "5px" }}>{errors.id}</div>}
+            <button className={`tab-btn ${tab === "user" ? "active" : ""}`} onClick={() => switchTab("user")}>Student</button>
+            <button className={`tab-btn ${tab === "admin" ? "active" : ""}`} onClick={() => switchTab("admin")}>Admin</button>
           </div>
 
-          <div className="form-group">
-            <div className="input-wrap">
-              <input
-                className={`form-input ${errors.password ? "input-error" : ""}`}
-                type={showPw ? "text" : "password"}
-                placeholder="Password"
-                value={form.password}
-                onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
-                onKeyDown={e => e.key === "Enter" && handleSubmit()}
-              />
-              <button className="eye-btn" onClick={() => setShowPw(x => !x)}>{showPw ? "🙈" : "👁"}</button>
-            </div>
-            {errors.password && <div style={{ color: "var(--coral)", fontSize: "0.8rem", marginTop: "5px" }}>{errors.password}</div>}
-          </div>
+          {error && <div className="error-msg">{error}</div>}
+          {success && <div className="success-msg">{success}</div>}
 
-          {isRegister && tab === "user" && (
-            <div className="form-group">
-              <div className="input-wrap">
+          {/* ── STUDENT / ADMIN LOGIN ── */}
+          {(tab === "user" || tab === "admin") && (
+            <>
+              <div className="login-title">{tab === "user" ? "Student Login" : "Admin Login"}</div>
+              <div className="form-group">
                 <input
-                  className={`form-input ${errors.confirm ? "input-error" : ""}`}
-                  type={showPw ? "text" : "password"}
-                  placeholder="Confirm Password"
-                  value={form.confirmPassword}
-                  onChange={e => setForm(f => ({ ...f, confirmPassword: e.target.value }))}
+                  className="form-input"
+                  placeholder={tab === "user" ? "Student ID (e.g. STU001)" : "Username"}
+                  value={form.id}
+                  onChange={e => setForm(f => ({ ...f, id: e.target.value }))}
                   onKeyDown={e => e.key === "Enter" && handleSubmit()}
                 />
-                <button className="eye-btn" onClick={() => setShowPw(x => !x)}>{showPw ? "🙈" : "👁"}</button>
               </div>
-              {errors.confirm && <div style={{ color: "var(--coral)", fontSize: "0.8rem", marginTop: "5px" }}>{errors.confirm}</div>}
-            </div>
+              <div className="form-group">
+                <div className="input-wrap">
+                  <input
+                    className="form-input"
+                    type={showPw ? "text" : "password"}
+                    placeholder="Password"
+                    value={form.password}
+                    onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+                    onKeyDown={e => e.key === "Enter" && handleSubmit()}
+                  />
+                  <button className="eye-btn" onClick={() => setShowPw(x => !x)}>{showPw ? "🙈" : "👁"}</button>
+                </div>
+              </div>
+              <button className="btn-primary" onClick={handleSubmit} disabled={loading}>
+                {loading ? "Signing in…" : "SIGN IN"}
+              </button>
+              {tab === "user" && (
+                <>
+                  <div className="forgot-link" onClick={() => switchTab("forgot")} style={{marginTop:"14px"}}>
+                    🔑 Forgot your password? <span style={{color:"var(--coral)"}}>Reset it</span>
+                  </div>
+                  <div className="forgot-link" onClick={() => switchTab("register")}>
+                    Don't have an account? <span style={{color:"var(--coral)"}}>Register here</span>
+                  </div>
+                </>
+              )}
+            </>
           )}
 
-          <button className="btn-primary" onClick={handleSubmit} disabled={loading}>
-            {loading ? (isRegister ? "Creating account…" : "Signing in…") : (isRegister ? "CREATE ACCOUNT" : "SIGN IN")}
-          </button>
+          {/* ── REGISTER ── */}
+          {tab === "register" && (
+            <>
+              {registeredStudentId ? (
+                /* ── SUCCESS CARD: shown after registration ── */
+                <div style={{
+                  textAlign: "center",
+                  padding: "8px 0",
+                  animation: "fadeIn 0.4s ease"
+                }}>
+                  <div style={{ fontSize: "2.5rem", marginBottom: "8px" }}>🎉</div>
+                  <div style={{ fontWeight: 700, fontSize: "1.1rem", color: "var(--text)", marginBottom: "4px" }}>
+                    Account Created!
+                  </div>
+                  <div style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "20px" }}>
+                    Save your Student ID — you'll need it to sign in.
+                  </div>
 
-          {tab === "user" && (
-            <div className="forgot-link" onClick={() => {
-              setIsRegister(!isRegister);
-              setErrors({ general: "", id: "", password: "", confirm: "" });
-              setForm({ id: "", password: "", confirmPassword: "" });
-            }}>
-              {isRegister ? "Already have an account? Sign in" : "Don't have an account? Register here"}
-            </div>
+                  {/* ID box */}
+                  <div style={{
+                    background: "rgba(var(--coral-rgb, 255,100,80), 0.1)",
+                    border: "2px dashed var(--coral)",
+                    borderRadius: "12px",
+                    padding: "16px 20px",
+                    marginBottom: "16px"
+                  }}>
+                    <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: "6px", letterSpacing: "0.05em", textTransform: "uppercase" }}>Your Student ID</div>
+                    <div style={{ fontSize: "1.6rem", fontWeight: 800, color: "var(--coral)", letterSpacing: "0.08em" }}>
+                      {registeredStudentId}
+                    </div>
+                  </div>
+
+                  {/* Copy button */}
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(registeredStudentId)
+                        .then(() => setSuccess("✅ Student ID copied to clipboard!"))
+                        .catch(() => setSuccess(`Your ID: ${registeredStudentId}`));
+                    }}
+                    style={{
+                      background: "transparent",
+                      border: "1px solid var(--border)",
+                      color: "var(--text-muted)",
+                      borderRadius: "8px",
+                      padding: "8px 20px",
+                      cursor: "pointer",
+                      fontSize: "0.85rem",
+                      marginBottom: "12px",
+                      width: "100%"
+                    }}
+                  >
+                    📋 Copy ID to Clipboard
+                  </button>
+                  {success && <div className="success-msg" style={{ marginBottom: "12px" }}>{success}</div>}
+
+                  {/* Go to login */}
+                  <button
+                    className="btn-primary"
+                    onClick={() => switchTab("user")}
+                  >
+                    Go to Sign In →
+                  </button>
+                </div>
+              ) : (
+                /* ── REGISTRATION FORM ── */
+                <>
+                  <div className="login-title">Create Account</div>
+                  <div className="form-group">
+                    <input
+                      className="form-input"
+                      placeholder="Full Name"
+                      value={regForm.name}
+                      onChange={e => setRegForm(f => ({ ...f, name: e.target.value }))}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <input
+                      className="form-input"
+                      type="email"
+                      placeholder="College Email (e.g. john@college.edu)"
+                      value={regForm.email}
+                      onChange={e => setRegForm(f => ({ ...f, email: e.target.value }))}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <div className="input-wrap">
+                      <input
+                        className="form-input"
+                        type={showRegPw ? "text" : "password"}
+                        placeholder="Password (min 6 chars)"
+                        value={regForm.password}
+                        onChange={e => setRegForm(f => ({ ...f, password: e.target.value }))}
+                      />
+                      <button className="eye-btn" onClick={() => setShowRegPw(x => !x)}>{showRegPw ? "🙈" : "👁"}</button>
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <input
+                      className="form-input"
+                      type="password"
+                      placeholder="Confirm Password"
+                      value={regForm.confirm}
+                      onChange={e => setRegForm(f => ({ ...f, confirm: e.target.value }))}
+                      onKeyDown={e => e.key === "Enter" && handleRegister()}
+                    />
+                  </div>
+                  <button className="btn-primary" onClick={handleRegister} disabled={loading}>
+                    {loading ? "Creating account…" : "CREATE ACCOUNT"}
+                  </button>
+                  <div className="forgot-link" onClick={() => switchTab("user")}>
+                    Already have an account? <span style={{color:"var(--coral)"}}>Sign in</span>
+                  </div>
+                </>
+              )}
+            </>
+          )}
+
+          {/* ── FORGOT PASSWORD ── */}
+          {tab === "forgot" && (
+            <>
+              <div className="login-title">Reset Password</div>
+
+              {/* Step indicator */}
+              <div className="step-indicator">
+                <div className={`step-dot ${forgotStep >= 1 ? "done" : ""}`}>1</div>
+                <div className={`step-line ${forgotStep >= 2 ? "done" : ""}`} />
+                <div className={`step-dot ${forgotStep >= 2 ? "done" : ""}`}>2</div>
+              </div>
+              <div className="step-labels">
+                <span style={{color: forgotStep === 1 ? "var(--coral)" : "var(--text-muted)"}}>Verify Identity</span>
+                <span style={{color: forgotStep === 2 ? "var(--coral)" : "var(--text-muted)"}}>New Password</span>
+              </div>
+
+              {/* Step 1 — enter Student ID + email */}
+              {forgotStep === 1 && (
+                <>
+                  <div className="form-group" style={{marginTop:"20px"}}>
+                    <input
+                      className="form-input"
+                      placeholder="Student ID (e.g. STU847362)"
+                      value={forgotForm.studentId}
+                      onChange={e => setForgotForm(f => ({ ...f, studentId: e.target.value }))}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <input
+                      className="form-input"
+                      type="email"
+                      placeholder="Registered Email"
+                      value={forgotForm.email}
+                      onChange={e => setForgotForm(f => ({ ...f, email: e.target.value }))}
+                      onKeyDown={e => e.key === "Enter" && handleForgotStep1()}
+                    />
+                  </div>
+                  <button className="btn-primary" onClick={handleForgotStep1} disabled={loading}>
+                    {loading ? "Verifying…" : "VERIFY IDENTITY →"}
+                  </button>
+                </>
+              )}
+
+              {/* Step 2 — set new password */}
+              {forgotStep === 2 && (
+                <>
+                  <p style={{textAlign:"center", color:"var(--text-muted)", fontSize:"0.85rem", margin:"16px 0 12px"}}>
+                    Setting new password for <strong style={{color:"var(--teal)"}}>{forgotForm.studentId.toUpperCase()}</strong>
+                    {" "}&middot;{" "}
+                    <span style={{color:"var(--text-muted)"}}>{forgotForm.email.toLowerCase()}</span>
+                  </p>
+                  <div className="form-group">
+                    <div className="input-wrap">
+                      <input
+                        className="form-input"
+                        type={showForgotPw ? "text" : "password"}
+                        placeholder="New Password (min 6 chars)"
+                        value={forgotForm.newPassword}
+                        onChange={e => setForgotForm(f => ({ ...f, newPassword: e.target.value }))}
+                      />
+                      <button className="eye-btn" onClick={() => setShowForgotPw(x => !x)}>{showForgotPw ? "🙈" : "👁"}</button>
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <input
+                      className="form-input"
+                      type="password"
+                      placeholder="Confirm New Password"
+                      value={forgotForm.confirm}
+                      onChange={e => setForgotForm(f => ({ ...f, confirm: e.target.value }))}
+                      onKeyDown={e => e.key === "Enter" && handleForgotReset()}
+                    />
+                  </div>
+                  <button className="btn-primary" onClick={handleForgotReset} disabled={loading}>
+                    {loading ? "Resetting…" : "RESET PASSWORD"}
+                  </button>
+                  <div className="forgot-link" onClick={() => { setForgotStep(1); setError(""); }}>
+                    ← Use different details
+                  </div>
+                </>
+              )}
+
+              <div className="forgot-link" onClick={() => switchTab("user")}>
+                Back to <span style={{color:"var(--coral)"}}>Sign In</span>
+              </div>
+            </>
           )}
         </div>
       </div>
@@ -1220,16 +1484,68 @@ function LoginPage({ onLogin }) {
   );
 }
 
+
 // ── MENU PAGE ─────────────────────────────────────────────────────────────────
-function MenuPage({ user, menu, onLogout, onPlaceOrder, liveOrders, formatOrderNumber }) {
+function MenuPage({ user, menu, onLogout, onPlaceOrder, onCancelOrder, liveOrders, setLiveOrders, formatOrderNumber }) {
   const [category, setCategory] = useState("All");
   const [cart, setCart] = useState({});
   const [cartOpen, setCartOpen] = useState(false);
-  const [view, setView] = useState("menu"); // "menu" | "orders"
+  const [view, setView] = useState("menu"); // "menu" | "account"
   const [toast, showToast] = useToast();
+  const [cancellingId, setCancellingId] = useState(null);
 
-  // Filter orders belonging to this student only
-  const orders = liveOrders.filter(o => o.studentId === user.id);
+  // Keeps IDs of orders that the student cancelled (or is cancelling).
+  // Using both a ref (for the polling guard) and a state Set (so the button
+  // can't reappear even if the poll overwrites liveOrders before the server
+  // confirms the new status).
+  const pendingCancels = useRef(new Set());
+  const [cancelledOrderIds, setCancelledOrderIds] = useState(() => new Set());
+
+  // Poll orders every 5 seconds. Merge pendingCancels to prevent flicker.
+  useEffect(() => {
+    if (!user) return;
+    const poll = async () => {
+      try {
+        const res = await axios.get("/api/orders");
+        setLiveOrders(
+          res.data.map(o => {
+            const id = o._id || o.id;
+            // If this order is pending cancel and server hasn't confirmed yet,
+            // keep it as cancelled so the UI doesn't flicker back.
+            if (pendingCancels.current.has(id) && o.status !== "cancelled") {
+              return { ...o, status: "cancelled" };
+            }
+            // Once server confirms, clean up the pending set
+            if (pendingCancels.current.has(id) && o.status === "cancelled") {
+              pendingCancels.current.delete(id);
+            }
+            return o;
+          })
+        );
+      } catch (err) {
+        console.error("Failed to poll orders", err);
+      }
+    };
+    poll();
+    const intervalId = setInterval(poll, 5000);
+    return () => clearInterval(intervalId);
+  }, [user, setLiveOrders]);
+
+  // Filter orders belonging to this student, sorted newest first.
+  // The server returns orders in ascending orderNumber order, but we always
+  // want the most recent order at the top so it doesn't jump around after
+  // the poll overwrites the optimistic prepend.
+  const orders = liveOrders
+    .filter(o => o.studentId === user.id)
+    .slice() // avoid mutating the original array
+    .sort((a, b) => {
+      if (a.orderNumber != null && b.orderNumber != null) {
+        return b.orderNumber - a.orderNumber; // newest (highest) first
+      }
+      // Fallback: MongoDB _id is time-based, lexicographic desc = newest first
+      if (a._id && b._id) return b._id > a._id ? 1 : -1;
+      return 0;
+    });
 
   const categories = ["All", "Breakfast", "Lunch", "Snacks", "Drinks"];
   const filtered = menu.filter(i => category === "All" || i.category === category);
@@ -1292,8 +1608,8 @@ function MenuPage({ user, menu, onLogout, onPlaceOrder, liveOrders, formatOrderN
       <nav className="nav">
         <div className="nav-logo">Q-Less <span>🍔</span></div>
         <div className="nav-right">
-          <button className="nav-btn" onClick={() => setView(v => v === "menu" ? "orders" : "menu")}>
-            {view === "menu" ? "📋 My Orders" : "🍽 Menu"}
+          <button className="nav-btn" onClick={() => setView(v => v === "menu" ? "account" : "menu")}>
+            {view === "menu" ? "👤 My Account" : "🍽 Menu"}
           </button>
           <button className="cart-btn" onClick={() => setCartOpen(true)}>
             🛒 Cart
@@ -1352,13 +1668,34 @@ function MenuPage({ user, menu, onLogout, onPlaceOrder, liveOrders, formatOrderN
         </>
       ) : (
         <div className="orders-section">
-          <div className="orders-title">My Orders</div>
+          {/* PROFILE CARD */}
+          <div className="profile-card" style={{ padding: "24px", background: "var(--surface)", borderRadius: "16px", border: "1px solid var(--border)", marginBottom: "32px", display: "flex", alignItems: "center", gap: "24px", boxShadow: "0 8px 24px rgba(0,0,0,0.2)" }}>
+            <div style={{ width: "72px", height: "72px", borderRadius: "50%", background: "linear-gradient(135deg, var(--coral), #ff8a65)", color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "2rem", fontWeight: "bold", flexShrink: 0, boxShadow: "0 4px 12px rgba(255, 107, 107, 0.4)" }}>
+              {user?.name ? user.name.charAt(0).toUpperCase() : "S"}
+            </div>
+            <div>
+              <h2 style={{ margin: "0 0 6px 0", color: "var(--text)", fontSize: "1.5rem" }}>{user?.name || "Student"}</h2>
+              <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", color: "var(--text-muted)", fontSize: "0.95rem" }}>
+                <span><strong>ID:</strong> {user?.id}</span>
+                {user?.email && <span><strong>Email:</strong> {user.email}</span>}
+              </div>
+            </div>
+          </div>
+
+          <div className="orders-title">Order History</div>
           {orders.length === 0 ? (
             <div className="no-orders">
               <div className="no-orders-icon">📋</div>
               You haven't placed any orders yet.
             </div>
-          ) : orders.map(o => (
+          ) : orders.map(o => {
+            // Use cancelledOrderIds as the source of truth for status while the
+            // cancel is in-flight or confirmed. This prevents any poll-generated
+            // 'preparing' data from briefly showing the wrong badge.
+            const effectiveStatus = cancelledOrderIds.has(o._id || o.id)
+              ? "cancelled"
+              : o.status;
+            return (
             <div key={o._id || o.orderNumber} className="order-card">
               <div className="order-header">
                 <div>
@@ -1366,20 +1703,62 @@ function MenuPage({ user, menu, onLogout, onPlaceOrder, liveOrders, formatOrderN
                   <div className="order-time">{o.time}</div>
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "6px" }}>
-                  <div className={`order-status status-${o.status}`}>
-                    {o.status === "preparing" ? "⏳ Preparing" : o.status === "ready" ? "✅ Ready" : "✔ Completed"}
+                  <div className={`order-status status-${effectiveStatus}`}>
+                    {effectiveStatus === "preparing" ? "⏳ Preparing"
+                      : effectiveStatus === "ready" ? "✅ Ready"
+                      : effectiveStatus === "cancelled" ? "❌ Cancelled"
+                      : "✔ Completed"}
                   </div>
                   <span className={`pay-badge ${o.paid ? "paid" : "pending"}`}>
                     {o.paid ? "✔ Payment Done" : "⏳ Payment Pending"}
                   </span>
+                  {/* Show cancel button only when truly still preparing */}
+                  {effectiveStatus === "preparing" && (
+                    <button 
+                      className="delete-btn" 
+                      disabled={cancellingId === (o._id || o.id)}
+                      onClick={async () => {
+                        const oid = o._id || o.id;
+                        pendingCancels.current.add(oid);
+                        setCancelledOrderIds(prev => new Set([...prev, oid]));
+                        setCancellingId(oid);
+                        try {
+                          await onCancelOrder(oid);
+                          showToast("Order cancelled successfully.");
+                        } catch(err) {
+                          pendingCancels.current.delete(oid);
+                          setCancelledOrderIds(prev => {
+                            const next = new Set(prev);
+                            next.delete(oid);
+                            return next;
+                          });
+                          showToast(err?.response?.data?.error || "Failed to cancel order.", "error");
+                        } finally {
+                          setCancellingId(null);
+                        }
+                      }}
+                      style={{ 
+                        marginTop: "4px", padding: "4px 8px", fontSize: "0.8rem", 
+                        background: cancellingId === (o._id || o.id) ? "rgba(239,68,68,0.05)" : "rgba(239, 68, 68, 0.1)", 
+                        color: "var(--red)", 
+                        border: "1px solid var(--red)", borderRadius: "4px", 
+                        cursor: cancellingId === (o._id || o.id) ? "not-allowed" : "pointer",
+                        opacity: cancellingId === (o._id || o.id) ? 0.55 : 1,
+                        transition: "opacity 0.2s"
+                      }}
+                    >
+                      {cancellingId === (o._id || o.id) ? "Cancelling…" : "Cancel Order"}
+                    </button>
+                  )}
                 </div>
               </div>
               <div className="order-items">
-                {o.items.map(i => `${i.name} × ${i.qty}`).join("  •  ")}
+                {o.items.map(i => `${i.name} × ${i.qty ?? i.quantity ?? 1}`).join("  •  ")}
               </div>
               <div className="order-total">₹{o.total}</div>
             </div>
-          ))}
+          );
+          })}
         </div>
       )}
 
@@ -1435,14 +1814,13 @@ function MenuPage({ user, menu, onLogout, onPlaceOrder, liveOrders, formatOrderN
 }
 
 // ── ADMIN PAGE ────────────────────────────────────────────────────────────────
-function AdminPage({ onLogout, menu, setMenu, liveOrders, setLiveOrders, formatOrderNumber, togglePayment }) {
+function AdminPage({ onLogout, menu, setMenu, liveOrders, setLiveOrders, formatOrderNumber }) {
   const [section, setSection] = useState("orders");
   const [newItem, setNewItem] = useState({ name: "", price: "", category: "Breakfast", quantity: 10 });
   const [toast, showToast] = useToast();
-  const [paymentVerificationOrder, setPaymentVerificationOrder] = useState(null);
 
   const safeLiveOrders = Array.isArray(liveOrders) ? liveOrders : [];
-  const activeOrders = safeLiveOrders.filter(o => o.status !== "completed");
+  const activeOrders = safeLiveOrders.filter(o => o.status !== "completed" && o.status !== "cancelled");
   const totalRevenue = safeLiveOrders.reduce((s, o) => s + (o.total || 0), 0);
   const inStockCount = Array.isArray(menu) ? menu.filter(m => getQty(m) > 0).length : 0;
 
@@ -1462,34 +1840,30 @@ function AdminPage({ onLogout, menu, setMenu, liveOrders, setLiveOrders, formatO
     return () => clearInterval(intervalId);
   }, [setLiveOrders]);
 
-  const updateQty = async (id, delta) => {
+  const updateTimeouts = useRef({});
+
+  const updateQty = (id, delta) => {
     const current = menu.find(i => i.id === id);
     if (!current) return;
 
-    const newQty = Math.max(0, current.quantity + delta);
+    const newQty = Math.max(0, Number(current.quantity || 0) + delta);
 
-    // Update UI first (optimistic)
-    setMenu(m =>
-      m.map(i =>
-        i.id === id ? { ...i, quantity: newQty, inStock: newQty > 0 } : i
-      )
-    );
+    // Update UI purely
+    setMenu(m => m.map(i => i.id === id ? { ...i, quantity: newQty, inStock: newQty > 0 } : i));
 
-    try {
-      console.log(`[MENU] Updating item ${id} quantity to ${newQty}`);
-      const res = await axios.put(`/api/menu/${id}`, { quantity: newQty });
-      console.log(`[MENU] Update successful:`, res.data);
-      showToast(`Quantity updated to ${newQty}`);
-    } catch (err) {
-      console.error("[MENU] Failed to update quantity:", err.response?.data || err.message);
-      // Revert UI if request fails
-      setMenu(m =>
-        m.map(i =>
-          i.id === id ? { ...i, quantity: current.quantity, inStock: current.quantity > 0 } : i
-        )
-      );
-      showToast(`Failed to update quantity: ${err.response?.data?.error || err.message}`, "error");
+    // Side effect (debounce sync to server) MUST NOT be inside setMenu()
+    if (updateTimeouts.current[id]) {
+      clearTimeout(updateTimeouts.current[id]);
     }
+    
+    updateTimeouts.current[id] = setTimeout(async () => {
+      try {
+        await axios.put(`/api/menu/${id}`, { quantity: newQty });
+      } catch (err) {
+        console.error(err);
+        showToast(`Failed to save quantity for ${current.name}`, "error");
+      }
+    }, 300);
   };
   const deleteItem = (id) => {
     const idNum = Number(id);
@@ -1499,7 +1873,6 @@ function AdminPage({ onLogout, menu, setMenu, liveOrders, setLiveOrders, formatO
   const addItem = async () => {
     if (!newItem.name.trim() || !newItem.price) { showToast("Fill in item name and price.", "error"); return; }
 
-    // Keep menu item IDs small and sequential (avoid huge timestamp IDs).
     const existingIds = (menu || []).map((i) => Number(i.id)).filter((n) => Number.isFinite(n) && n < 1e9);
     const nextId = (existingIds.length ? Math.max(...existingIds) : 0) + 1;
 
@@ -1515,17 +1888,16 @@ function AdminPage({ onLogout, menu, setMenu, liveOrders, setLiveOrders, formatO
     };
 
     try {
-      console.log("[MENU] Adding new item:", item);
       const res = await axios.post("/api/menu", item);
-      console.log("[MENU] Item added successfully:", res.data);
       const added = res.data;
-      const addedQty = Number(added.qty ?? added.quantity ?? added.stock ?? 0);
-      setMenu(m => [...m, { ...added, qty: addedQty, inStock: addedQty > 0 }]);
+      const addedQty = Number(added.quantity ?? added.qty ?? added.stock ?? 0);
+      const normalized = { ...added, quantity: addedQty, inStock: addedQty > 0 };
+      setMenu(m => [...m, normalized]);
       setNewItem({ name: "", price: "", category: "Breakfast", quantity: 10 });
       showToast("Item added to menu!");
     } catch (err) {
-      console.error("[MENU] Failed to add menu item:", err.response?.data || err.message);
-      showToast(`Failed to add menu item: ${err.response?.data?.error || err.message}`, "error");
+      console.error("Failed to add menu item", err);
+      showToast("Failed to add menu item.", "error");
     }
   };
   const updateStatus = async (orderId, status) => {
@@ -1536,6 +1908,20 @@ function AdminPage({ onLogout, menu, setMenu, liveOrders, setLiveOrders, formatO
     } catch (err) {
       console.error("Failed to update order status", err);
       showToast("Failed to update order status", "error");
+    }
+  };
+
+  const togglePayment = async (orderId) => {
+    const order = (liveOrders || []).find(x => x._id === orderId);
+    if (!order) return;
+
+    try {
+      const res = await axios.put(`/api/orders/${orderId}`, { paid: !order.paid });
+      setLiveOrders(o => (o || []).map(x => (x._id === orderId ? res.data : x)));
+      showToast("Payment status updated.");
+    } catch (err) {
+      console.error("Failed to toggle payment", err);
+      showToast("Failed to toggle payment", "error");
     }
   };
 
@@ -1588,36 +1974,25 @@ function AdminPage({ onLogout, menu, setMenu, liveOrders, setLiveOrders, formatO
       <main className="admin-main">
         {section === "orders" && (
           <>
-            {/* View 1: Manual Payment */}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
-                  <div className="page-title">Incoming Orders</div>
-                  <button
-                    className="pay-toggle-btn"
-                    style={{ background: "var(--teal)", color: "var(--dark)", padding: "10px 16px", fontWeight: "600" }}
-                    onClick={() => window.open("/#/digital-verification", "PaymentVerification", "width=1024,height=768,menubar=no,toolbar=no")}
-                    title="Open digital payment verification in new tab"
-                  >
-                    🔍 Digital Verification
-                  </button>
-                </div>
-                <div className="stats-row">
-                  <div className="stat-card coral">
-                    <div className="stat-value">{activeOrders.length}</div>
-                    <div className="stat-label">Active Orders</div>
-                  </div>
-                  <div className="stat-card teal">
-                    <div className="stat-value">₹{totalRevenue}</div>
-                    <div className="stat-label">Total Revenue</div>
-                  </div>
-                  <div className="stat-card green">
-                    <div className="stat-value">{liveOrders.length}</div>
-                    <div className="stat-label">Total Orders</div>
-                  </div>
-                  <div className="stat-card yellow">
-                    <div className="stat-value">{inStockCount}</div>
-                    <div className="stat-label">Items In Stock</div>
-                  </div>
-                </div>
+            <div className="page-title">Incoming Orders</div>
+            <div className="stats-row">
+              <div className="stat-card coral">
+                <div className="stat-value">{activeOrders.length}</div>
+                <div className="stat-label">Active Orders</div>
+              </div>
+              <div className="stat-card teal">
+                <div className="stat-value">₹{totalRevenue}</div>
+                <div className="stat-label">Total Revenue</div>
+              </div>
+              <div className="stat-card green">
+                <div className="stat-value">{liveOrders.length}</div>
+                <div className="stat-label">Total Orders</div>
+              </div>
+              <div className="stat-card yellow">
+                <div className="stat-value">{inStockCount}</div>
+                <div className="stat-label">Items In Stock</div>
+              </div>
+            </div>
             {activeOrders.length === 0 ? (
               <div className="no-orders">
                 <div className="no-orders-icon">🎉</div>
@@ -1646,8 +2021,17 @@ function AdminPage({ onLogout, menu, setMenu, liveOrders, setLiveOrders, formatO
                         {order.paid ? "✔ Payment Done" : "⏳ Payment Pending"}
                       </span>
                       <button className="pay-toggle-btn" onClick={() => togglePayment(order._id)} title="Toggle payment status">
-                        {order.paid ? "Mark Pending" : "✅ Mark Paid"}
+                        {order.paid ? "Mark Pending" : "Mark Paid manually"}
                       </button>
+                      {!order.paid && (
+                        <button 
+                          className="status-btn ready" 
+                          style={{ marginLeft: "auto", padding: "4px 8px", fontSize: "0.8rem", background: "var(--teal)" }}
+                          onClick={() => verifyViaPi(order)}
+                        >
+                          📷 Verify via Pi
+                        </button>
+                      )}
                     </div>
                     <div className="live-order-footer">
                       <div className="live-order-total">₹{order.total}</div>
@@ -1750,18 +2134,6 @@ function AdminPage({ onLogout, menu, setMenu, liveOrders, setLiveOrders, formatO
           </>
         )}
       </main>
-
-      {paymentVerificationOrder && (
-        <PaymentCameraModal
-          order={paymentVerificationOrder}
-          onClose={() => setPaymentVerificationOrder(null)}
-          onSuccess={(updatedOrder) => {
-            setLiveOrders(o => o.map(x => x._id === updatedOrder._id ? updatedOrder : x));
-            setPaymentVerificationOrder(null);
-            showToast("✅ Payment verified successfully!");
-          }}
-        />
-      )}
     </div>
   );
 }
@@ -1774,13 +2146,18 @@ function useLocalStorage(key, initial) {
       return stored ? JSON.parse(stored) : initial;
     } catch { return initial; }
   });
-  const set = (updater) => {
+
+  // Memoize so the reference is stable across renders.
+  // Without this, any component that uses setLiveOrders in a useEffect
+  // dependency array would re-run on every render, firing extra network calls.
+  const set = useCallback((updater) => {
     setValue(prev => {
       const next = typeof updater === "function" ? updater(prev) : updater;
       try { localStorage.setItem(key, JSON.stringify(next)); } catch { }
       return next;
     });
-  };
+  }, [key]); // key is a constant string — set will never change
+
   return [value, set];
 }
 
@@ -1794,7 +2171,7 @@ export default function App() {
       setUser(null);
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const [menu, setMenu] = useLocalStorage("qless_menu", INITIAL_MENU);
+  const [menu, setMenu] = useState(INITIAL_MENU);
   const [liveOrders, setLiveOrders] = useLocalStorage("qless_orders", []);
 
   const logoutTimer = useRef(null);
@@ -1897,6 +2274,41 @@ export default function App() {
     }
   };
 
+  const handleCancelOrder = async (orderId) => {
+    // Optimistic update so the UI responds immediately
+    setLiveOrders(orders => orders.map(o =>
+      (o._id === orderId || o.id === orderId) ? { ...o, status: "cancelled" } : o
+    ));
+
+    try {
+      await axios.put(`/api/orders/${orderId}/cancel`);
+
+      // Fetch fresh orders AND menu from server so state is authoritative.
+      // Running them in parallel keeps it fast.
+      const [ordersRes, menuRes] = await Promise.all([
+        axios.get("/api/orders"),
+        axios.get("/api/menu"),
+      ]);
+      const normalize = (item) => ({
+        ...item,
+        quantity: Number(item.quantity ?? 0),
+        inStock: Number(item.quantity ?? 0) > 0,
+      });
+      setMenu((menuRes.data || []).map(normalize));
+      // Server data is now authoritative after the confirmed cancel.
+      // MenuPage's own pendingCancels guard in the polling loop will
+      // protect any other concurrent in-flight cancellations.
+      setLiveOrders(ordersRes.data);
+    } catch (err) {
+      console.error(err);
+      // Revert the optimistic update on failure
+      setLiveOrders(orders => orders.map(o =>
+        (o._id === orderId || o.id === orderId) ? { ...o, status: "preparing" } : o
+      ));
+      throw err;
+    }
+  };
+
   const formatOrderNumber = (input) => {
     const order = typeof input === "object" ? input : null;
     const n = order ? order.orderNumber : input;
@@ -1909,41 +2321,23 @@ export default function App() {
     return "#----";
   };
 
-  const togglePayment = async (orderId) => {
-    const order = (liveOrders || []).find(x => x._id === orderId);
-    if (!order) return;
-
-    try {
-      const res = await axios.put(`/api/orders/${orderId}`, { paid: !order.paid });
-      setLiveOrders(o => (o || []).map(x => (x._id === orderId ? res.data : x)));
-    } catch (err) {
-      console.error("Failed to toggle payment", err);
-    }
-  };
-
-  const isDigitalVerification = window.location.hash === "#/digital-verification";
-
   return (
     <>
       <style>{CSS}</style>
-      {isDigitalVerification && (
-        <DigitalPaymentVerificationPage
-          orders={liveOrders}
-          togglePayment={togglePayment}
-        />
-      )}
-      {!isDigitalVerification && !user && <LoginPage onLogin={handleLogin} />}
-      {!isDigitalVerification && (user?.role === "user" || user?.role === "student") && (
+      {!user && <LoginPage onLogin={handleLogin} />}
+      {(user?.role === "user" || user?.role === "student") && (
         <MenuPage
           user={user}
           menu={menu}
           onLogout={handleLogout}
           onPlaceOrder={handlePlaceOrder}
+          onCancelOrder={handleCancelOrder}
           liveOrders={liveOrders}
+          setLiveOrders={setLiveOrders}
           formatOrderNumber={formatOrderNumber}
         />
       )}
-      {!isDigitalVerification && user?.role === "admin" && (
+      {user?.role === "admin" && (
         <AdminPage
           onLogout={handleLogout}
           menu={menu}
@@ -1951,7 +2345,6 @@ export default function App() {
           liveOrders={liveOrders}
           setLiveOrders={setLiveOrders}
           formatOrderNumber={formatOrderNumber}
-          togglePayment={togglePayment}
         />
       )}
     </>

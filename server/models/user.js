@@ -11,6 +11,13 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    email: {
+      type: String,
+      unique: true,
+      sparse: true, // allows null for admin accounts without email
+      lowercase: true,
+      trim: true,
+    },
     password: {
       type: String,
       required: true,

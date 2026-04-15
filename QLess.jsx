@@ -747,6 +747,7 @@ const CSS = `
   .status-preparing { background: rgba(245,158,11,0.2); color: var(--yellow); }
   .status-ready { background: rgba(34,197,94,0.2); color: var(--green); }
   .status-completed { background: rgba(139,163,193,0.15); color: var(--text-muted); }
+  .status-cancelled { background: rgba(239,68,68,0.15); color: var(--red); }
   .order-items { margin-bottom: 12px; font-size: 0.88rem; color: var(--text-muted); }
   .order-total {
     font-family: 'Syne', sans-serif;
@@ -1405,8 +1406,15 @@ function MenuPage({ user, menu, onLogout, onPlaceOrder, liveOrders }) {
   const [view, setView] = useState("menu"); // "menu" | "orders"
   const [toast, showToast] = useToast();
 
-  // Filter orders belonging to this student only
-  const orders = liveOrders.filter(o => o.studentId === user.id);
+  // Filter orders belonging to this student only, newest first
+  const orders = liveOrders
+    .filter(o => o.studentId === user.id)
+    .slice()
+    .sort((a, b) => {
+      // Sort by _id or fallback to array position (newer orders are at front)
+      if (a._id && b._id) return b._id > a._id ? 1 : -1;
+      return 0;
+    });
 
   const categories = ["All", "Breakfast", "Lunch", "Snacks", "Drinks"];
   const filtered = menu.filter(i => category === "All" || i.category === category);
@@ -1527,7 +1535,10 @@ function MenuPage({ user, menu, onLogout, onPlaceOrder, liveOrders }) {
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "6px" }}>
                   <div className={`order-status status-${o.status}`}>
-                    {o.status === "preparing" ? "⏳ Preparing" : o.status === "ready" ? "✅ Ready" : "✔ Completed"}
+                    {o.status === "preparing" ? "⏳ Preparing"
+                      : o.status === "ready" ? "✅ Ready"
+                      : o.status === "cancelled" ? "🚫 Cancelled"
+                      : "✔ Completed"}
                   </div>
                   <span className={`pay-badge ${o.paid ? "paid" : "pending"}`}>
                     {o.paid ? "✔ Payment Done" : "⏳ Payment Pending"}
@@ -1847,7 +1858,7 @@ function useLocalStorage(key, initial) {
     return () => window.removeEventListener("storage", onStorage);
   }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Poll every 500 ms so same-window student↔admin sync works too
+  // Poll every 100 ms so same-window student↔admin sync works with minimal delay
   useEffect(() => {
     const interval = setInterval(() => {
       setValue(prev => {
@@ -1855,7 +1866,7 @@ function useLocalStorage(key, initial) {
         // Only trigger re-render if data actually changed
         return JSON.stringify(fresh) !== JSON.stringify(prev) ? fresh : prev;
       });
-    }, 500);
+    }, 100);
     return () => clearInterval(interval);
   }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
 

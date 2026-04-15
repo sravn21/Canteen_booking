@@ -62,31 +62,45 @@ router.post("/", async (req,res)=>{
   }
 });
 
-// Update a menu item by id
+// ── PUT: Update a menu item by id ───────────────────────────────────────────
 router.put("/:id", async (req, res) => {
   try {
     const { id } = req.params;
     const updateData = { ...req.body };
 
-    console.log(`[MENU] Updating item ${id} with:`, updateData);
-
-    // Try matching by numeric `id` first, then Mongo `_id`.
-    let updated = await Menu.findOneAndUpdate({ id: Number(id) }, updateData, { new: true });
-    if (!updated) {
-      console.log(`[MENU] Not found by numeric id, trying Mongo _id...`);
-      updated = await Menu.findByIdAndUpdate(id, updateData, { new: true });
+    // Always keep inStock in sync with quantity
+    if (updateData.quantity != null) {
+      updateData.inStock = Number(updateData.quantity) > 0;
     }
 
-    if (!updated) {
-      console.log(`[MENU] Item not found: ${id}`);
-      return res.status(404).json({ error: "Menu item not found" });
+    // Try matching by numeric `id` first
+    let numericId = Number(id);
+    let updated = null;
+    
+    if (!isNaN(numericId)) {
+      updated = await Menu.findOneAndUpdate(
+        { id: numericId },
+        { $set: updateData },
+        { new: true, runValidators: true }
+      );
     }
 
-    console.log(`[MENU] Update successful:`, updated._id, "quantity:", updated.quantity);
+    // If not found, try matching by Mongo `_id`
+    const mongoose = require("mongoose");
+    if (!updated && mongoose.Types.ObjectId.isValid(id)) {
+      updated = await Menu.findByIdAndUpdate(
+        id,
+        { $set: updateData },
+        { new: true, runValidators: true }
+      );
+    }
+
+    if (!updated) return res.status(404).json({ error: "Menu item not found" });
+    
     res.json(updated);
-  } catch (err) {
-    console.error("[MENU] Failed to update menu item:", err.message);
-    res.status(500).json({ error: `Failed to update menu item: ${err.message}` });
+  } catch (error) {
+    console.error("❌ PUT /api/menu/:id Error:", error.message);
+    res.status(500).json({ error: "Server Error", details: error.message });
   }
 });
 
